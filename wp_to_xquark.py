@@ -43,6 +43,7 @@ def convert(wp_url: str) -> str:
     result = (
         f"@headline:{title}\n"
         f"@byline:By {byline.upper()}\n"
+        "@bysub:"
         f"@normalcopy:\n"
         f"{body}"
     )
