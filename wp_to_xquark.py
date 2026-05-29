@@ -1,13 +1,24 @@
 import os
 import sys
+import json
+import importlib.util
 from urllib.parse import urlparse, parse_qs
 
 import requests
 
-from html_to_xquark import html_to_xquark
-
 USER_AGENT = {"User-agent": "9Ds8MnNbYcg5t376c8m6"}
 API_BASE = "https://stanforddaily.com/wp-json/wp/v2/posts"
+
+
+def print_notion_view_json():
+    """Call the Notion query helper and print its JSON output."""
+    api_query_path = os.path.join("notion-experiment", "api-query.py")
+    spec = importlib.util.spec_from_file_location("api_query", api_query_path)
+    api_query = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(api_query)
+
+    rows = api_query.get_notion_view_json()
+    print(json.dumps(rows, indent=2))
 
 
 def post_id_from_url(url: str) -> str:
@@ -30,6 +41,8 @@ def fetch_post(post_id: str) -> dict:
 
 def convert(wp_url: str) -> str:
     """Fetch a WordPress post by its admin edit URL and return XQuarkXPress-tagged text."""
+    from html_to_xquark import html_to_xquark
+
     post_id = post_id_from_url(wp_url)
     data = fetch_post(post_id)
 
@@ -61,5 +74,7 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: python wp_to_xquark.py <wp-admin-edit-url>")
         sys.exit(1)
+
+    print_notion_view_json()
 
     convert(sys.argv[1])
