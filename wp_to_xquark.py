@@ -9,6 +9,11 @@ import requests
 USER_AGENT = {"User-agent": "9Ds8MnNbYcg5t376c8m6"}
 API_BASE = "https://stanforddaily.com/wp-json/wp/v2/posts"
 
+def get_sample_json():
+    #this is just so we can test using the sample post json
+    with open("sample_post_json.txt") as f:
+        data = json.load(f)
+    return data
 
 def print_notion_view_json():
     """Call the Notion query helper and print its JSON output."""
@@ -18,8 +23,24 @@ def print_notion_view_json():
     spec.loader.exec_module(api_query)
 
     rows = api_query.get_notion_view_json()
-    print(json.dumps(rows, indent=2))
+    return json.dumps(rows, indent=2)
 
+def retrieve_notion_data(json):
+    #given a json for a single article, returns important variables
+    url = json["url"]
+    writer_title = json["Writer / Title"]
+    writer,title = parse_writer_title(writer_title)
+    print_slug = json["Slug (Print)"]
+    desk = json["desk"]
+    section = json["section"]
+    web_status = json["Web Status"]
+    print_week = json["Print Week"]
+    return url,writer,title,print_slug,desk,section,web_status,print_week
+
+def parse_writer_title(writer_title):
+    #for a string in the format "writer / title" it returns both as tuple
+    writer, title = writer_title.split("/", 1)
+    return writer.strip(), title.strip()
 
 def post_id_from_url(url: str) -> str:
     """Extract post ID from a WP admin edit URL or a ?p= permalink."""
