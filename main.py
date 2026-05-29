@@ -24,11 +24,10 @@ SECTION_TAG_MAP = {
     "sports": ("@byline", "@bysub"),
     "opinions": ("@byline", "@bysub"),
     "arts & life": ("@A&Lbyline", "@A&Lbysub"),
-    "the grind": ("@GRIbyline", "@GRIbysub"),
-    "humor": ("@HUMbyline", "@HUMbysub"),
+    "the grind": ("@A&Lbyline", "@A&Lbysub"),
+    "humor": ("@A&Lbyline", "@A&Lbysub"),
 }
 DEFAULT_TAGS = ("@byline", "@bysub")
-
 
 def _byline_str(authors: list[tuple[str, str]]) -> str:
     names = [n.upper() for n, _ in authors if n]
