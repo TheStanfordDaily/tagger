@@ -9,7 +9,6 @@ import requests
 USER_AGENT = {"User-agent": "9Ds8MnNbYcg5t376c8m6"}
 API_BASE = "https://stanforddaily.com/wp-json/wp/v2/posts"
 
-<<<<<<< HEAD
 # Section name (lowercase) → (byline_tag, bysub_tag)
 SECTION_TAG_MAP = {
     "news": ("@byline", "@bysub"),
@@ -20,8 +19,6 @@ SECTION_TAG_MAP = {
     "humor": ("@A&Lbyline", "@A&Lbysub"),
 }
 DEFAULT_TAGS = ("@byline", "@bysub")
-
-
 
 def build_xquark(headline: str, section: str, authors: list[tuple[str, str]], body: str) -> str:
     byline_tag, bysub_tag = SECTION_TAG_MAP.get((section or "").lower().strip(), DEFAULT_TAGS)
@@ -36,13 +33,11 @@ def build_xquark(headline: str, section: str, authors: list[tuple[str, str]], bo
 
     return f"@headline:{headline}\n{bylines}@normalcopy:\n{body}"
 
-=======
 def get_sample_json():
     #this is just so we can test using the sample post json
     with open("sample_post_json.txt") as f:
         data = json.load(f)
     return data
->>>>>>> 60fb05e7668c4d80680b5c506e7cb6b5244280d4
 
 def print_notion_view_json():
     """Call the Notion query helper and print its JSON output."""
