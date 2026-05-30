@@ -6,7 +6,11 @@ from pathlib import Path
 from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+import ssl
+import certifi
 
+ctx = ssl.create_default_context(cafile=certifi.where())
+#Kayla's Pycharm has certification problems so this makes it use certify's trusted CA bundle
 
 NOTION_VERSION = "2026-03-11"
 PAGE_SIZE = 100
@@ -75,7 +79,7 @@ def notion_fetch(path, notion_token, method="GET", body=None, headers=None):
     )
 
     try:
-        with urlopen(request) as response:
+        with urlopen(request, context=ctx) as response:
             response_body = response.read().decode("utf-8")
     except HTTPError as error:
         error_body = error.read().decode("utf-8")
