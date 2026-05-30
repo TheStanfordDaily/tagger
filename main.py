@@ -18,6 +18,38 @@ from notion_api import (
     filename_stem_from_row,
 )
 
+# Section name (lowercase) → (byline_tag, bysub_tag)
+SECTION_TAG_MAP = {
+    "news": ("@byline", "@bysub"),
+    "sports": ("@byline", "@bysub"),
+    "opinions": ("@byline", "@bysub"),
+    "arts & life": ("@A&Lbyline", "@A&Lbysub"),
+    "the grind": ("@A&Lbyline", "@A&Lbysub"),
+    "humor": ("@A&Lbyline", "@A&Lbysub"),
+}
+DEFAULT_TAGS = ("@byline", "@bysub")
+
+def _byline_str(authors: list[tuple[str, str]]) -> str:
+    names = [n.upper() for n, _ in authors if n]
+    if not names:
+        return "AUTHOR"
+    if len(names) == 1:
+        return names[0]
+    return ", ".join(names[:-1]) + " AND " + names[-1]
+
+
+def build_xquark(headline: str, section: str, authors: list[tuple[str, str]], body: str) -> str:
+    byline_tag, bysub_tag = SECTION_TAG_MAP.get((section or "").lower().strip(), DEFAULT_TAGS)
+    positions = [pos for _, pos in authors if pos]
+
+    return (
+        f"@headline:{headline}\n"
+        f"{byline_tag}:By {_byline_str(authors)}\n"
+        f"{bysub_tag}:{', '.join(positions)}\n"
+        f"@normalcopy:\n"
+        f"{body}"
+    )
+
 
 def _resolve_authors(row: dict, wp_data: dict) -> list[tuple[str, str]]:
     authors = parse_writer_title(row.get("Writer / Title"))
