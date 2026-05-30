@@ -9,6 +9,32 @@ import requests
 USER_AGENT = {"User-agent": "9Ds8MnNbYcg5t376c8m6"}
 API_BASE = "https://stanforddaily.com/wp-json/wp/v2/posts"
 
+# Section name (lowercase) → (byline_tag, bysub_tag)
+SECTION_TAG_MAP = {
+    "news": ("@byline", "@bysub"),
+    "sports": ("@byline", "@bysub"),
+    "opinions": ("@byline", "@bysub"),
+    "arts & life": ("@A&Lbyline", "@A&Lbysub"),
+    "the grind": ("@A&Lbyline", "@A&Lbysub"),
+    "humor": ("@A&Lbyline", "@A&Lbysub"),
+}
+DEFAULT_TAGS = ("@byline", "@bysub")
+
+
+
+def build_xquark(headline: str, section: str, authors: list[tuple[str, str]], body: str) -> str:
+    byline_tag, bysub_tag = SECTION_TAG_MAP.get((section or "").lower().strip(), DEFAULT_TAGS)
+
+    if not authors:
+        authors = [("AUTHOR", "")]
+
+    bylines = "".join(
+        f"{byline_tag}:By {name.upper()}\n{bysub_tag}:{pos}\n"
+        for name, pos in authors
+    )
+
+    return f"@headline:{headline}\n{bylines}@normalcopy:\n{body}"
+
 
 def print_notion_view_json():
     """Call the Notion query helper and print its JSON output."""
@@ -39,30 +65,33 @@ def fetch_post(post_id: str) -> dict:
     return response.json()
 
 
-def convert(wp_url: str) -> str:
-    """Fetch a WordPress post by its admin edit URL and return XQuarkXPress-tagged text."""
+def convert(
+    wp_url: str,
+    authors: list[tuple[str, str]] | None = None,
+    section: str = "",
+    filename_stem: str | None = None,
+) -> str:
+    """Fetch a WordPress post and return XQuarkXPress-tagged text.
+
+    authors: list of (name, position) pairs from Notion; falls back to WP
+             parsely data if not provided.
+    section: section name used to select byline/bysub tag style.
+    filename_stem: output filename without extension; defaults to post title.
+    """
     from html_to_xquark import html_to_xquark
 
-    post_id = post_id_from_url(wp_url)
-    data = fetch_post(post_id)
-
+    data = fetch_post(post_id_from_url(wp_url))
     title = data["title"]["rendered"]
-    authors = data.get("parsely", {}).get("meta", {}).get("creator", [])
-    byline = ", ".join(authors) if authors else "AUTHOR"
-    body_html = data["content"]["rendered"]
+    body = html_to_xquark(data["content"]["rendered"])
 
-    body = html_to_xquark(body_html)
+    if not authors:
+        wp_creators = data.get("parsely", {}).get("meta", {}).get("creator", [])
+        authors = [(name, "") for name in wp_creators]
 
-    result = (
-        f"@headline:{title}\n"
-        f"@byline:By {byline.upper()}\n"
-        "@bysub:"
-        f"@normalcopy:\n"
-        f"{body}"
-    )
+    result = build_xquark(title, section, authors, body)
 
     os.makedirs("output", exist_ok=True)
-    out_path = os.path.join("output", f"{title}.txt")
+    out_path = os.path.join("output", f"{filename_stem or title}.txt")
     with open(out_path, "w") as f:
         f.write(result)
     print(f"Written to {out_path}")

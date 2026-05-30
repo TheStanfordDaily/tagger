@@ -21,6 +21,13 @@ def get_all_rows() -> list:
     return _load_notion_module().get_notion_view_json()
 
 
+def _is_community_submission(row: dict) -> bool:
+    writer = row.get("Writer / Title") or ""
+    if isinstance(writer, list):
+        return any("from the community" in str(w).lower() for w in writer)
+    return "from the community" in writer.lower()
+
+
 def get_filtered_rows() -> list:
     """Return rows for this week's print-ready articles."""
     return [
@@ -28,6 +35,7 @@ def get_filtered_rows() -> list:
         if r.get("Print Week") == PRINT_WEEK_FILTER
         and r.get("Print Status") == PRINT_STATUS_FILTER
         and r.get("Web Status") == WEB_STATUS_FILTER
+        and not _is_community_submission(r)
     ]
 
 

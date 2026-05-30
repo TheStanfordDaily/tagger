@@ -38,6 +38,10 @@ def html_to_xquark(html: str) -> str:
     soup = BeautifulSoup(html, "html.parser")
     for tag in soup.find_all(NON_TEXT_TAGS):
         tag.decompose()
+    for p in soup.find_all("p"):
+        italic = p.find(["em", "i"])
+        if italic and re.match(r"(Update|Correction):", italic.get_text().strip(), re.IGNORECASE):
+            p.decompose()
     text = unidecode(str(soup))
 
     for pattern, replacement in regex_tags.items():
