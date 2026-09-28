@@ -6,32 +6,55 @@ from urllib.parse import urlparse, parse_qs
 
 import requests
 
-USER_AGENT = {"User-agent": "9Ds8MnNbYcg5t376c8m6"}
+USER_AGENT = {"User-Agent": "StanfordDailyPrintTagger/1.0 (+https://stanforddaily.com)"}
 API_BASE = "https://stanforddaily.com/wp-json/wp/v2/posts"
 
-# Section name (lowercase) → (byline_tag, bysub_tag)
 SECTION_TAG_MAP = {
-    "news": ("@byline", "@bysub"),
-    "sports": ("@byline", "@bysub"),
-    "opinions": ("@byline", "@bysub"),
-    "arts & life": ("@A&Lbyline", "@A&Lbysub"),
-    "the grind": ("@A&Lbyline", "@A&Lbysub"),
-    "humor": ("@A&Lbyline", "@A&Lbysub"),
+    "news": ("NEWS", "9.21", "@byline", "@bysub"),
+    "sports": ("SPORTS", "9.21", "@byline", "@bysub"),
+    "opinions": ("OPINIONS", "9.21", "@byline", "@bysub"),
+    "arts & life": ("ARTS & LIFE", "9.30", "@A&Lbyline", "@A&Lbysub"),
+    "the grind": ("ARTS & LIFE", "9.30", "@A&Lbyline", "@A&Lbysub"),
+    "humor": ("ARTS & LIFE", "9.30", "@A&Lbyline", "@A&Lbysub"),
 }
-DEFAULT_TAGS = ("@byline", "@bysub")
+DEFAULT_SECTION = SECTION_TAG_MAP["news"]
+
+
+def _section_template(section: str) -> tuple[str, str, str, str]:
+    value = (section or "").lower().strip()
+    aliases = {
+        "opinion": "opinions",
+        "op-ed": "opinions",
+        "op-eds": "opinions",
+        "arts and life": "arts & life",
+        "grind": "the grind",
+    }
+    value = aliases.get(value, value)
+    return SECTION_TAG_MAP.get(value, DEFAULT_SECTION)
+
 
 def build_xquark(headline: str, section: str, authors: list[tuple[str, str]], body: str) -> str:
-    byline_tag, bysub_tag = SECTION_TAG_MAP.get((section or "").lower().strip(), DEFAULT_TAGS)
+    """Build the standard, import-ready template for an article.
 
+    Individual author/byline pairs are deliberate: Quark needs each author in
+    its own tagged pair, and empty position fields must not produce ``@bysub``.
+    """
+    header, version, byline_tag, bysub_tag = _section_template(section)
     if not authors:
         authors = [("AUTHOR", "")]
-
-    bylines = "".join(
-        f"{byline_tag}:By {name.upper()}\n{bysub_tag}:{pos}\n"
-        for name, pos in authors
-    )
-
-    return f"@headline:{headline}\n{bylines}@normalcopy:\n{body}"
+    bylines = []
+    for name, position in authors:
+        name = str(name).strip()
+        if not name:
+            continue
+        bylines.append(f"{byline_tag}:By {name.upper()}")
+        if position and str(position).strip():
+            bylines.append(f"{bysub_tag}:{str(position).strip().upper()}")
+    if not bylines:
+        bylines.append(f"{byline_tag}:By AUTHOR")
+    return "\n".join(
+        [f"<v{version}><e0>", f"@NewsHeader:{header}", f"@headline:{headline}", *bylines, "@normalcopy:", body]
+    ).rstrip() + "\n"
 
 def get_sample_json():
     #this is just so we can test using the sample post json
@@ -61,10 +84,20 @@ def post_id_from_url(url: str) -> str:
 
 
 def fetch_post(post_id: str) -> dict:
+    """Fetch a public WordPress post; inaccessible posts require manual work."""
     url = f"{API_BASE}/{post_id}"
-    response = requests.get(url, headers=USER_AGENT)
-    response.raise_for_status()
-    return response.json()
+    try:
+        response = requests.get(url, headers=USER_AGENT, timeout=30)
+    except requests.RequestException as exc:
+        raise RuntimeError(f"Could not fetch public WordPress post {post_id}: {exc}. Add it manually.") from exc
+    if response.status_code != 200:
+        raise RuntimeError(
+            f"Public WordPress post {post_id} is unavailable (HTTP {response.status_code}). Add it manually."
+        )
+    try:
+        return response.json()
+    except ValueError as exc:
+        raise RuntimeError(f"Public WordPress post {post_id} returned invalid JSON. Add it manually.") from exc
 
 
 def convert(
@@ -105,7 +138,8 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: python wp_to_xquark.py <wp-admin-edit-url>")
         sys.exit(1)
+    # Keep this legacy command useful, but route all writes through the
+    # manifest/report-aware entry point.
+    from main import single
 
-    print_notion_view_json()
-
-    convert(sys.argv[1])
+    raise SystemExit(single(sys.argv[1]))

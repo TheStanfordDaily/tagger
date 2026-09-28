@@ -2,9 +2,10 @@
 
 import os
 import importlib.util
+from urllib.parse import parse_qs, urlparse
 
 PRINT_WEEK_FILTER = "✅ This Week"
-PRINT_STATUS_FILTER = "Ready for Copy"
+PRINT_STATUS_FILTER = "To Print"
 WEB_STATUS_FILTER = "Finaled & published"
 
 
@@ -24,25 +25,42 @@ def get_all_rows() -> list:
 def _is_community_submission(row: dict) -> bool:
     writer = row.get("Writer / Title") or ""
     if isinstance(writer, list):
-        return any("from the community" in str(w).lower() for w in writer)
-    return "from the community" in writer.lower()
+        return any("from the community" in str(item).lower() for item in writer)
+    return "from the community" in str(writer).lower()
+
+
+def get_batch_rows() -> tuple[list[dict], list[dict]]:
+    """Return exportable rows and Community rows deliberately left unbatched.
+
+    It applies the active weekly status filters, then keeps Community stories
+    out of the batch while recording them for the review report.
+    """
+    selected_rows = [
+        row for row in get_all_rows()
+        if row.get("Print Week") == PRINT_WEEK_FILTER
+        and row.get("Print Status") == PRINT_STATUS_FILTER
+        and row.get("Web Status") == WEB_STATUS_FILTER
+    ]
+    community = [row for row in selected_rows if _is_community_submission(row)]
+    return [row for row in selected_rows if not _is_community_submission(row)], community
 
 
 def get_filtered_rows() -> list:
-    """Return rows for this week's print-ready articles."""
-    return [
-        r for r in get_all_rows()
-        if r.get("Print Week") == PRINT_WEEK_FILTER
-        and r.get("Print Status") == PRINT_STATUS_FILTER
-        and r.get("Web Status") == WEB_STATUS_FILTER
-        and not _is_community_submission(r)
-    ]
+    """Return exportable rows (compatibility wrapper for older callers)."""
+    return get_batch_rows()[0]
 
 
 def find_row_for_url(wp_url: str) -> dict | None:
-    """Return the first Notion row whose 'WP Post' matches wp_url, or None."""
+    """Return the matching Notion row, accepting equivalent WordPress URLs."""
+    def post_id(value: str | None) -> str | None:
+        params = parse_qs(urlparse(value or "").query)
+        return (params.get("post") or params.get("p") or [None])[0]
+
+    requested_id = post_id(wp_url)
     for row in get_all_rows():
         if row.get("WP Post") == wp_url:
+            return row
+        if requested_id and post_id(row.get("WP Post")) == requested_id:
             return row
     return None
 
@@ -51,7 +69,9 @@ def parse_writer_title(value) -> list[tuple[str, str]]:
     """Parse the 'Writer / Title' Notion field into (name, position) pairs.
 
     Accepts a people-type list or a text field formatted as
-    "Name / Position", comma-separated for multiple authors.
+    "Name / Position", comma-separated for multiple authors. A compact
+    ``Name/Story title`` value is also used by some run sheets; the story-title
+    part is metadata, not a bysub, so it is intentionally omitted.
     """
     if not value:
         return []
@@ -65,6 +85,10 @@ def parse_writer_title(value) -> list[tuple[str, str]]:
         if " / " in entry:
             name, _, pos = entry.partition(" / ")
             pairs.append((name.strip(), pos.strip()))
+        elif "/" in entry:
+            name, _, _title = entry.partition("/")
+            if name.strip():
+                pairs.append((name.strip(), ""))
         else:
             pairs.append((entry, ""))
     return pairs

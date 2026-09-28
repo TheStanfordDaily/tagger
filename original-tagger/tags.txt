@@ -1,0 +1,206 @@
+- If there are **second/third authors**, they need to be entered:
+
+> @byline:By FIRST AUTHOR@bysub:THEIR POSITION@byline:By SECOND AUTHOR@bysub:THEIR POSITION@byline:By THIRD AUTHOR@bysub:THEIR POSITION@normalcopy:
+>
+
+**Ops credits: whenever an Op-Ed or any opinion article is signed at the bottom with a “— Author Name”, please replace the em-dash with @OPScred:**
+
+**E.g. @OPScred:John Hennessy
+@OPStitle:University President**
+
+**Bold AND italics:**
+
+<@CEBoldital>bold ital<@$p>
+
+**Bold:**
+
+<@CEBold>blah<@$p>
+
+**Italics:**
+
+<@CEIt>blah<@$p>
+
+Em dash: <\p><\_><\p>
+
+Example: “But the linebacker — a big, 230-pound meathead — blocked the kick.”
+
+Becomes: “But the linebacker<\p><\_><\p>a big, 230-pound
+
+> meathead<\p><\_><\p>blocked the kick.” (No spaces around tags)
+> 
+
+Half space: “<\p>’
+
+Ellipsis: <\p>...<\p>
+
+Example: “I wet my pants…It was painful.”
+
+Becomes: “I wet my pants<\p>...<\p>It was painful.”
+
+Class Year: <\#213>Last two digits of class year
+
+Example: “Do-Hyoung Park ’16 said nothing.”
+
+Becomes: “Do-Hyoung Park <\#213>16 said nothing.”
+
+**Numbered List tags:**
+
+@DigitIndent:1. <\i><@normalcopy>Bold textBold textBold text Bold text Bold text Regular text Regular textRegular text
+
+@DigitIndent:2. <\i><@normalcopy>Bold textBold textBold text Bold text Bold text Regular text Regular textRegular text1
+
+@normalcopy: Non-indented text non-indented text non-indented text non-indented text
+
+**NEWS HEADER/FOOTER TAGS:**
+
+News articles (NOT briefs): (AND ARTICLES FOR the Grind)
+
+<v9.21><e0>
+
+@NewsHeader:SECTION IN CAPS (usually listed on WordPress in the “category” column)
+
+@byline:By AUTHOR IN CAPS
+
+@bysub:(CONTRIBUTING WRITER or DESK EDITOR or NEWS EDITOR
+
+@normalcopy:
+
+[add in story here]
+
+@@line:Contact Author Name at authorsuid@stanford.edu.
+
+Articles with multiple authors:
+
+<v9.21><e0>
+
+@NewsHeader:SECTION IN CAPS (usually listed on WordPress in the “category” column)
+
+@byline:By AUTHOR IN CAPS
+
+@bysub:(CONTRIBUTING WRITER or DESK EDITOR or whatever)
+
+@byline: OTHER AUTHOR IN CAPS
+
+@bysub: OTHER AUTHOR'S BYSUB
+
+@normalcopy:
+
+[add in story here]
+
+@@line:Contact Author Name at authorsuid@stanford.edu
+
+**Police blotter** and other articles that are bullet pointed for whatever reason:
+
+<v9.21><e0>
+
+@NewsHeader:CRIME & SAFETY
+
+@byline:By SAM PREMUTICO
+
+@bysub:STAFF WRITER
+
+@normalcopy:
+
+This report covers all the stupid shit that people did between Oct. 19 and Nov. 23 as reported on the Stanford Police Blotter Thing.
+
+@COPSdate:Tuesday, Oct. 19<@$p>
+
+@normalcopy:<@COPSbullet><a$$>n<@$p> <\i>Some idiot got drunk and threw a pineapple through a window and was transported to San Jose Main Jail for public stupidity.
+
+@normalcopy:<@COPSbullet><a$$>n<@$p> <\i>Football player Barry J. Sanders got arrested for flashing a school bus in San Diego.
+
+@COPSdate:Wednesday, Oct. 20<@$p>
+
+@normalcopy:<@COPSbullet><a$$>n<@$p> <\i>Snape killed Voldemort, but the police couldn’t do much about it because Snape was an asshole anyway.
+
+(etc. etc. etc. Make sure there is ***one space*** between the <@$p> and <\i> at the end of each bullet tag. Add more @normalcopy:<@COPSbullet>... lines under each date with ***no whitespace separation*** if you need multiple bullet points per date, and **do not** add a line of whitespace between the last bullet and the next @COPSdate:... line to move on to the next date. If there’s a paragraph at the end that isn’t bulleted, just leave a line of whitespace after the last bullet and just copy-paste and tag it like a normal article.)
+
+@@line:Contact Sam Premutico at email@stanford.edu.
+
+**SPORTS HEADER/FOOTER TAGS:**
+
+Sports articles (NOT columns or briefs):
+
+<v9.21><e0>
+
+@byline:By AUTHOR
+
+@bysub: BYLINE
+
+@normalcopy:
+
+Article text article text article text
+
+@@line:Contact _______ at _______@stanford.edu.
+
+Columns:
+
+<v9.21><e0>
+
+@normalcopy:<@SPOdrop><*d(1,5)><a$$>T<@$p><t-6>his is how you tag the first paragraph. This keeps going until the end of the first paragraph.
+
+<*d(0)> Look at me, I’m the second paragraph!
+
+**OPINIONS HEADER/FOOTER TAGS:**
+
+For columns:
+
+<v9.21><e0>
+
+Series Title: The title of the series goes here (if not a series, just “column”)
+
+Author: Name of the author goes here
+
+Column Title: Title of the column goes here
+
+@normalcopy:<*d(1,3)><z9>T<z$>wo days ago, a United States military drone operation in Pakistan killed another Taliban official. The mission was only the latest in a series of more than 350 drone strikes in Pakistan since 2004. Drones play an increasingly important role in US Military operations, where they are used both for reconnaissance and remote attacks over the Middle East’s notoriously difficult terrain.
+
+<*d(0)> Second paragraph whoo paragraph lorem ipsum dynamite peach guava apple lemonade purple mold
+
+@@line:Contact Firstname Lastname at theirid@stanford.edu.
+
+Op-eds/letters to the editor:
+
+<v9.21><e0>
+
+Series Title: Op-Ed / Letter to the Editor
+
+Column Title: Name of the author goes here
+
+@OPSlethead: Title of the column goes here (title on Wordpress)
+
+@normalcopy:<*d(1,3)><z9>T<z$>wo days ago, a United States military drone operation in Pakistan killed another Taliban official. The mission was only the latest in a series of more than 350 drone strikes in Pakistan since 2004. Drones play an increasingly important role in US Military operations, where they are used both for reconnaissance and remote attacks over the Middle East’s notoriously difficult terrain.
+
+<*d(0)> Second paragraph whoo paragraph lorem ipsum dynamite peach guava apple lemonade purple mold
+
+**the following lines go at the bottom (above the @@line)**
+
+@OPScred:Jeremy Hsu
+
+@OPStitle:Ph.D. candidate in biology, President of the Stanford Symphony Orchestra
+
+@@line:Contact Jeremy Hsu at music@stanford.edu.
+
+**ARTS AND LIFE HEADER/FOOTER TAGS:**
+
+**A&L:**
+
+<v9.30><e0>
+
+@NewsHeader:SECTION
+
+@A&Lbyline:By WHO KNOWS
+
+@A&Lbysub:THEIR POSITION
+
+@normalcopy:
+
+<@A&Ldropcap><*bn(7.2,1,0)*d(1,6)>T<@$p>his is like arts and life stuff. Definitely text. Article stuff. Yeah. Gotta love it.
+
+<*d(0)> Look at me, I’m the second paragraph! Martin Luther ate a monkey banana and retched a mango.
+
+For sentences that start with “[Letter]: <@A&Ldropcap><*bn(7.2,1,0)*d(2,6)>
+
+@@line:Contact Firstname Lastname at author@stanford.edu.
+
+<@CEIt>Editor’s Note: This article is a review and includes subjective thoughts, opinions and critiques.<@$p>

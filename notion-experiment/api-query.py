@@ -19,6 +19,7 @@ DEFAULT_ENV_FILES = (
     Path.cwd() / ".env",
     Path(__file__).resolve().parent / ".env",
 )
+VIEW_CONFIG_FILE = Path(__file__).resolve().parent / "notion-view.json"
 
 
 def load_env_file(file_path):
@@ -57,6 +58,17 @@ def load_env_files(env_file=None):
 
     for file_path in DEFAULT_ENV_FILES:
         load_env_file(file_path)
+
+
+def load_view_id() -> str | None:
+    """Read the non-secret committed Notion view configuration."""
+    if not VIEW_CONFIG_FILE.exists():
+        return None
+    try:
+        value = json.loads(VIEW_CONFIG_FILE.read_text(encoding="utf-8")).get("notion_view_id")
+    except (OSError, json.JSONDecodeError) as error:
+        raise RuntimeError(f"Invalid Notion view configuration: {error}") from error
+    return str(value).strip() if value else None
 
 
 def notion_fetch(path, notion_token, method="GET", body=None, headers=None):
@@ -257,7 +269,7 @@ def get_notion_view_json(view_id=None, notion_token=None, env_file=None):
     load_env_files(env_file)
 
     notion_token = notion_token or os.environ.get("NOTION_TOKEN")
-    view_id = view_id or os.environ.get("NOTION_VIEW_ID")
+    view_id = view_id or load_view_id() or os.environ.get("NOTION_VIEW_ID")
 
     if not notion_token:
         raise RuntimeError("Missing NOTION_TOKEN environment variable.")

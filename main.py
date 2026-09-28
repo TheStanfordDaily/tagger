@@ -1,163 +1,281 @@
-"""Entry point for the Stanford Daily XQuark tagging pipeline.
+"""Notion → WordPress → MacRoman XQuark print export.
 
 Usage:
-  python main.py                # batch: all this-week articles from Notion
-  python main.py <wp-edit-url>  # single article (Notion metadata looked up by URL)
+  python main.py                # eligible Notion rows
+  python main.py <wp-edit-url>  # one article re-export
 """
 
+from __future__ import annotations
+
+import json
 import os
 import sys
+from dataclasses import dataclass, field
+from pathlib import Path
 
-from html_to_xquark import html_to_xquark
-from wp_to_xquark import post_id_from_url, fetch_post, build_xquark
+from bs4 import BeautifulSoup
+
+from html_to_xquark import ConversionNotes, html_to_xquark
 from notion_api import (
-    get_filtered_rows,
+    filename_stem_from_row,
     find_row_for_url,
+    get_batch_rows,
     parse_writer_title,
     section_from_row,
-    filename_stem_from_row,
 )
-
-# Section name (lowercase) → (byline_tag, bysub_tag)
-SECTION_TAG_MAP = {
-    "news": ("@byline", "@bysub"),
-    "sports": ("@byline", "@bysub"),
-    "opinions": ("@byline", "@bysub"),
-    "arts & life": ("@A&Lbyline", "@A&Lbysub"),
-    "the grind": ("@A&Lbyline", "@A&Lbysub"),
-    "humor": ("@A&Lbyline", "@A&Lbysub"),
-}
-DEFAULT_TAGS = ("@byline", "@bysub")
-
-def _byline_str(authors: list[tuple[str, str]]) -> str:
-    names = [n.upper() for n, _ in authors if n]
-    if not names:
-        return "AUTHOR"
-    if len(names) == 1:
-        return names[0]
-    return ", ".join(names[:-1]) + " AND " + names[-1]
+from wp_to_xquark import build_xquark, fetch_post, post_id_from_url
 
 
-def build_xquark(headline: str, section: str, authors: list[tuple[str, str]], body: str) -> str:
-    byline_tag, bysub_tag = SECTION_TAG_MAP.get((section or "").lower().strip(), DEFAULT_TAGS)
-    positions = [pos for _, pos in authors if pos]
-
-    return (
-        f"@headline:{headline}\n"
-        f"{byline_tag}:By {_byline_str(authors)}\n"
-        f"{bysub_tag}:{', '.join(positions)}\n"
-        f"@normalcopy:\n"
-        f"{body}"
-    )
+OUTPUT_DIR = Path("output")
+MANIFEST_PATH = OUTPUT_DIR / "manifest.json"
+REPORT_PATH = OUTPUT_DIR / "review-report.txt"
 
 
-def _resolve_authors(row: dict, wp_data: dict) -> list[tuple[str, str]]:
-    authors = parse_writer_title(row.get("Writer / Title"))
+def _macroman_safe(value: str) -> str:
+    """Keep output importable by old Quark installations without data errors."""
+    result = []
+    for char in value:
+        try:
+            char.encode("mac_roman")
+            result.append(char)
+        except UnicodeEncodeError:
+            # Transliteration is more useful in a print file than a write error.
+            from unidecode import unidecode
+            result.append(unidecode(char) or "?")
+    return "".join(result)
+
+
+def _clean_headline(value: str) -> str:
+    return _macroman_safe(BeautifulSoup(value or "", "html.parser").get_text(" ", strip=True))
+
+
+@dataclass
+class ReviewReport:
+    written: list[str] = field(default_factory=list)
+    skipped: list[str] = field(default_factory=list)
+    malformed: list[str] = field(default_factory=list)
+    collisions: list[str] = field(default_factory=list)
+    unsupported: list[str] = field(default_factory=list)
+    removed: list[str] = field(default_factory=list)
+    contacts: list[str] = field(default_factory=list)
+    failed: int = 0
+
+    def issue(self, kind: str, message: str, failed: bool = False) -> None:
+        getattr(self, kind).append(message)
+        if failed:
+            self.failed += 1
+
+    def include_notes(self, label: str, notes: ConversionNotes) -> None:
+        self.unsupported.extend(f"{label}: {item}" for item in notes.unsupported)
+        self.removed.extend(f"{label}: {item}" for item in notes.removed)
+        self.contacts.extend(f"{label}: {item}" for item in notes.contact_warnings)
+
+    def render(self) -> str:
+        do_manually = [*self.skipped, *self.malformed, *self.collisions]
+        groups = (
+            ("Do manually", do_manually),
+            ("Written files", self.written),
+            ("Unsupported formatting", self.unsupported),
+            ("Removed content", self.removed),
+            ("Contact-line warnings", self.contacts),
+        )
+        lines = ["Print tagging review report", ""]
+        for title, items in groups:
+            if not items:
+                continue
+            lines.append(f"{title}:")
+            lines.extend(f"- {item}" for item in items)
+            lines.append("")
+        lines.append(f"Result: {len(self.written)} written, {self.failed} failed.")
+        return "\n".join(lines) + "\n"
+
+
+class OutputWriter:
+    """Manifest-backed writer that refuses to replace another story's file."""
+
+    def __init__(self, output_dir: Path = OUTPUT_DIR):
+        self.output_dir = output_dir
+        self.manifest_path = output_dir / "manifest.json"
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.data = {"version": 1, "files": {}}
+        if self.manifest_path.exists():
+            try:
+                loaded = json.loads(self.manifest_path.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict) and isinstance(loaded.get("files"), dict):
+                    self.data = loaded
+            except (OSError, json.JSONDecodeError) as exc:
+                raise RuntimeError(f"Cannot read output manifest: {exc}") from exc
+
+    @staticmethod
+    def _same_story(entry: dict, identity: dict) -> bool:
+        return bool(
+            entry
+            and (
+                (identity.get("post_id") and entry.get("post_id") == identity.get("post_id"))
+                or (identity.get("wp_url") and entry.get("wp_url") == identity.get("wp_url"))
+                or (identity.get("notion_id") and entry.get("notion_id") == identity.get("notion_id"))
+            )
+        )
+
+    def write(self, stem: str, text: str, identity: dict) -> Path:
+        filename = f"{stem}.txt"
+        path = self.output_dir / filename
+        entry = self.data["files"].get(filename)
+        if entry and not self._same_story(entry, identity):
+            raise FileExistsError(f"manifest maps {filename} to a different story")
+        if path.exists() and not entry:
+            raise FileExistsError(f"{filename} already exists but is not in the output manifest")
+        safe = _macroman_safe(text)
+        # A replace is only used after the manifest identifies this as the same
+        # story, so reruns are safe while collisions remain non-destructive.
+        temporary = path.with_suffix(".txt.tmp")
+        temporary.write_text(safe, encoding="mac_roman", errors="strict")
+        os.replace(temporary, path)
+        self.data["files"][filename] = identity
+        temporary_manifest = self.manifest_path.with_suffix(".json.tmp")
+        temporary_manifest.write_text(json.dumps(self.data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        os.replace(temporary_manifest, self.manifest_path)
+        return path
+
+
+def _resolve_authors(row: dict | None, wp_data: dict) -> list[tuple[str, str]]:
+    authors = parse_writer_title(row.get("Writer / Title")) if row else []
+    authors = [(name.strip(), position.strip()) for name, position in authors if str(name).strip()]
     if authors:
-        print(f"    Authors (Notion): {authors}")
-    else:
-        wp_creators = wp_data.get("parsely", {}).get("meta", {}).get("creator", [])
-        authors = [(name, "") for name in wp_creators]
-        print(f"    Authors (WP fallback): {authors}")
-    return authors
+        return authors
+    creators = wp_data.get("parsely", {}).get("meta", {}).get("creator", [])
+    return [(str(name).strip(), "") for name in creators if str(name).strip()]
 
 
-def _write_output(stem: str, text: str) -> str:
-    os.makedirs("output", exist_ok=True)
-    out_path = os.path.join("output", f"{stem}.txt")
-    with open(out_path, "w") as f:
-        f.write(text)
-    return out_path
+def _artifact(row: dict | None, wp_url: str) -> tuple[str, str, dict, ConversionNotes]:
+    post_id = post_id_from_url(wp_url)
+    data = fetch_post(post_id)
+    headline = _clean_headline(data.get("title", {}).get("rendered", ""))
+    if not headline:
+        raise ValueError("missing WordPress title")
+    authors = _resolve_authors(row, data)
+    if not authors:
+        raise ValueError("missing author in both Notion Writer / Title and WordPress")
+    section = section_from_row(row) if row else "news"
+    notes = ConversionNotes()
+    body = html_to_xquark(data.get("content", {}).get("rendered", ""), notes)
+    if row is not None and not row.get("Slug (Print)"):
+        raise ValueError("missing Slug (Print)")
+    stem = filename_stem_from_row(row, headline) if row else filename_stem_from_row({}, headline)
+    if not stem:
+        raise ValueError("missing print slug")
+    identity = {"post_id": str(post_id), "wp_url": wp_url, "notion_id": row.get("id") if row else None}
+    return stem, build_xquark(headline, section, authors, body), identity, notes
 
 
 def convert_row(row: dict) -> tuple[str, str]:
-    """Convert a single Notion row to (filename_stem, xquark_text)."""
+    """Compatibility helper: convert a Notion row without writing output."""
     wp_url = row.get("WP Post")
     if not wp_url:
         raise ValueError(f"Row {row.get('id')} has no WP Post URL")
-
-    print(f"  Fetching WP post: {wp_url}")
-    data = fetch_post(post_id_from_url(wp_url))
-    headline = data["title"]["rendered"]
-    print(f"  Headline: {headline}")
-
-    section = section_from_row(row)
-    print(f"  Section: {section!r}")
-
-    authors = _resolve_authors(row, data)
-
-    print(f"  Converting HTML body...")
-    body = html_to_xquark(data["content"]["rendered"])
-
-    text = build_xquark(headline, section, authors, body)
-    stem = filename_stem_from_row(row, headline)
-    print(f"  Filename stem: {stem!r}")
+    stem, text, _, _ = _artifact(row, wp_url)
     return stem, text
 
 
-def batch():
-    """Process all this-week Notion articles and write output files."""
-    print("Fetching Notion rows...")
-    rows = get_filtered_rows()
-    print(f"Found {len(rows)} article(s) matching filters.\n")
+def _write_report(report: ReviewReport, output_dir: Path | None = None) -> Path:
+    output_dir = output_dir or OUTPUT_DIR
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / "review-report.txt"
+    path.write_text(_macroman_safe(report.render()), encoding="mac_roman", errors="strict")
+    return path
 
-    ok = fail = 0
-    for i, row in enumerate(rows, 1):
-        slug = row.get("Slug (Print)") or row.get("id")
-        print(f"[{i}/{len(rows)}] {slug}")
+
+def batch() -> int:
+    report = ReviewReport()
+    try:
+        rows, community_rows = get_batch_rows()
+    except Exception as exc:
+        report.issue("malformed", f"Notion query failed: {exc}", failed=True)
+        _write_report(report)
+        print(f"Notion query failed; see {REPORT_PATH}", file=sys.stderr)
+        return 1
+    for row in community_rows:
+        label = str(row.get("Slug (Print)") or row.get("id") or "unknown row")
+        report.skipped.append(f"{label}: From the Community article (not batched).")
+    if not rows:
+        report.skipped.append("No non-Community rows matched the configured batch selection.")
+        _write_report(report)
+        print("No eligible rows. See output/review-report.txt")
+        return 0
+    try:
+        writer = OutputWriter(OUTPUT_DIR)
+    except Exception as exc:
+        report.issue("malformed", str(exc), failed=True)
+        _write_report(report)
+        return 1
+
+    # Detect duplicate print slugs before fetching or writing either article.
+    claims: dict[str, list[dict]] = {}
+    for row in rows:
+        slug = filename_stem_from_row(row, "")
+        if slug:
+            claims.setdefault(slug.casefold(), []).append(row)
+    duplicates = {id(row) for same in claims.values() if len(same) > 1 for row in same}
+
+    for row in rows:
+        label = str(row.get("Slug (Print)") or row.get("id") or "unknown row")
+        if id(row) in duplicates:
+            report.issue("collisions", f"{label}: duplicate Slug (Print) in this batch", failed=True)
+            continue
+        if not row.get("Slug (Print)"):
+            report.issue("malformed", f"{label}: missing Slug (Print)", failed=True)
+            continue
+        wp_url = row.get("WP Post")
+        if not wp_url:
+            report.issue("malformed", f"{label}: missing WP Post URL", failed=True)
+            continue
         try:
-            stem, text = convert_row(row)
-            out_path = _write_output(stem, text)
-            print(f"  Written: {out_path}\n")
-            ok += 1
+            stem, text, identity, notes = _artifact(row, wp_url)
+            path = writer.write(stem, text, identity)
+            report.written.append(path.name)
+            report.include_notes(label, notes)
+            if (section_from_row(row) or "").strip().lower().startswith("opinion"):
+                report.unsupported.append(f"{label}: Opinions exported in standard form; review any special Opinion layout.")
+        except FileExistsError as exc:
+            report.issue("collisions", f"{label}: {exc}", failed=True)
         except Exception as exc:
-            print(f"  ERROR: {exc}\n", file=sys.stderr)
-            fail += 1
+            report.issue("malformed", f"{label}: {exc}", failed=True)
+    _write_report(report)
+    print(f"Done: {len(report.written)} written, {report.failed} failed. See {REPORT_PATH}")
+    return 1 if report.failed else 0
 
-    print(f"Done: {ok} written, {fail} failed.")
 
-
-def single(wp_url: str) -> str:
-    """Convert one article by WP URL, using Notion metadata if a row is found."""
-    print(f"Looking up Notion row for: {wp_url}")
-    row = find_row_for_url(wp_url)
-    if row:
-        print(f"  Notion row found: {row.get('Slug (Print)') or row.get('id')}")
-    else:
-        print("  No Notion row found — falling back to WP metadata only.")
-
-    print(f"Fetching WP post...")
-    data = fetch_post(post_id_from_url(wp_url))
-    headline = data["title"]["rendered"]
-    print(f"  Headline: {headline}")
-
-    if row:
-        section = section_from_row(row)
-        authors = _resolve_authors(row, data)
-        stem = filename_stem_from_row(row, headline)
-    else:
-        section = ""
-        wp_creators = data.get("parsely", {}).get("meta", {}).get("creator", [])
-        authors = [(name, "") for name in wp_creators]
-        stem = headline
-
-    print(f"  Section: {section!r}")
-    print(f"  Converting HTML body...")
-    body = html_to_xquark(data["content"]["rendered"])
-
-    text = build_xquark(headline, section, authors, body)
-    out_path = _write_output(stem, text)
-    print(f"Written to {out_path}")
-    return text
+def single(wp_url: str) -> int:
+    report = ReviewReport()
+    try:
+        # Validate before a Notion lookup so malformed URLs have a useful error.
+        post_id_from_url(wp_url)
+        row = find_row_for_url(wp_url)
+        writer = OutputWriter(OUTPUT_DIR)
+        stem, text, identity, notes = _artifact(row, wp_url)
+        path = writer.write(stem, text, identity)
+        report.written.append(path.name)
+        report.include_notes(stem, notes)
+        if not row:
+            report.skipped.append("No Notion row matched this URL; used WordPress title/authors and NEWS template.")
+        elif (section_from_row(row) or "").strip().lower().startswith("opinion"):
+            report.unsupported.append(f"{stem}: Opinions exported in standard form; review any special Opinion layout.")
+    except FileExistsError as exc:
+        report.issue("collisions", str(exc), failed=True)
+    except Exception as exc:
+        report.issue("malformed", str(exc), failed=True)
+    _write_report(report)
+    if report.failed:
+        print(f"Export failed; see {REPORT_PATH}", file=sys.stderr)
+        return 1
+    print(f"Written to output/{report.written[0]}; see {REPORT_PATH}")
+    return 0
 
 
 if __name__ == "__main__":
     if len(sys.argv) == 1:
-        batch()
-    elif len(sys.argv) == 2:
-        single(sys.argv[1])
-    else:
-        print("Usage:")
-        print("  python main.py                # batch: all this-week articles from Notion")
-        print("  python main.py <wp-edit-url>  # single article")
-        sys.exit(1)
+        raise SystemExit(batch())
+    if len(sys.argv) == 2:
+        raise SystemExit(single(sys.argv[1]))
+    print("Usage:\n  python main.py\n  python main.py <wp-admin-edit-url>", file=sys.stderr)
+    raise SystemExit(2)
