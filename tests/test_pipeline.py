@@ -6,8 +6,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from html_to_xquark import ConversionNotes, html_to_xquark
-from main import OutputWriter, batch
-from notion_api import PRINT_STATUS_FILTER, PRINT_WEEK_FILTER, get_batch_rows, parse_writer_title
+from main import OutputWriter, batch, cli
+from notion_api import PRINT_STATUS_FILTER, PRINT_WEEK_FILTER, filename_stem_from_row, get_batch_rows, parse_writer_title, writer_title_error
 from wp_to_xquark import build_xquark, fetch_post
 
 
@@ -38,12 +38,47 @@ class HtmlConversionTests(unittest.TestCase):
         self.assertIn("@A&Lbyline:By ONE\n@A&Lbysub:EDITOR\n@A&Lbyline:By TWO", text)
         self.assertNotIn("@A&Lbysub:\n", text)
 
+    def test_dropcap_skips_opening_italic_note(self):
+        output = html_to_xquark(
+            "<p><em>Editor’s Note: context.</em></p><p>“This is the story.</p><p>Second paragraph.</p>",
+            dropcap_tag="@A&Ldropcap",
+        )
+        self.assertTrue(output.startswith("<@CEIt>Editor’s Note: context.<@$p>"))
+        self.assertIn("<@A&Ldropcap><*bn(7.2,1,0)*d(2,6)>“T<@$p>his", output)
+        self.assertIn("<*d(0)> Second paragraph.", output)
+
+    def test_non_al_body_does_not_receive_dropcap(self):
+        output = html_to_xquark("<p>News copy.</p>")
+        self.assertNotIn("A&Ldropcap", output)
+
+    def test_section_specific_dropcap_tags_and_reset_are_supported(self):
+        output = html_to_xquark("<p>Grind copy.</p><p>Next paragraph.</p>", dropcap_tag="@GRIdropcap")
+        self.assertIn("<@GRIdropcap><*bn(7.2,1,0)*d(1,6)>G<@$p>rind", output)
+        self.assertIn("<*d(0)> Next paragraph.", output)
+
 
 class MetadataAndOutputTests(unittest.TestCase):
     def test_author_variants(self):
         self.assertEqual(parse_writer_title("A / Editor, B / Writer"), [("A", "Editor"), ("B", "Writer")])
         self.assertEqual(parse_writer_title(["A", "B"]), [("A", ""), ("B", "")])
         self.assertEqual(parse_writer_title("A Writer/Story title"), [("A Writer", "")])
+
+    def test_malformed_writer_title_is_flagged(self):
+        self.assertEqual(writer_title_error("A/Writer"), "use spaces around each slash: Name / Role")
+        self.assertEqual(
+            writer_title_error("A / Writer and B / Editor"),
+            "separate multiple Name / Role pairs with commas, not 'and'",
+        )
+        self.assertIsNone(writer_title_error("A / Writer, B / Editor"))
+
+    def test_filename_uses_section_lowercase_slug_and_publication_date(self):
+        row = {"Section": "Sports", "Slug (Print)": "Home Opener"}
+        self.assertEqual(filename_stem_from_row(row, "20260928"), "SPOhome opener20260928")
+
+    def test_cli_passes_publication_date_to_batch(self):
+        with patch("main.batch", return_value=0) as run_batch:
+            self.assertEqual(cli(["--publication-date", "20260928"]), 0)
+        run_batch.assert_called_once_with("20260928")
 
     def test_community_rows_are_not_batched(self):
         ordinary = {"id": "ordinary", "Writer / Title": "A Writer", "Print Week": PRINT_WEEK_FILTER, "Print Status": PRINT_STATUS_FILTER, "Web Status": "Finaled & published"}
@@ -73,17 +108,33 @@ class MetadataAndOutputTests(unittest.TestCase):
             output = Path(temporary) / "output"
             row = {"id": "bad", "WP Post": "https://example.test/?p=1"}
             with patch("main.OUTPUT_DIR", output), patch("main.get_batch_rows", return_value=([row], [])):
-                self.assertEqual(batch(), 1)
+                self.assertEqual(batch("20260928"), 1)
             report = (output / "review-report.txt").read_text(encoding="mac_roman")
             self.assertIn("missing Slug (Print)", report)
             self.assertIn("Result: 0 written, 1 failed.", report)
+
+    def test_batch_reports_malformed_writer_title_for_manual_handling(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "output"
+            row = {
+                "id": "bad-writer",
+                "Section": "News",
+                "Slug (Print)": "BAD",
+                "Writer / Title": "A / Writer and B / Editor",
+                "WP Post": "https://example.test/?p=1",
+            }
+            with patch("main.OUTPUT_DIR", output), patch("main.get_batch_rows", return_value=([row], [])):
+                self.assertEqual(batch("20260928"), 1)
+            report = (output / "review-report.txt").read_text(encoding="mac_roman")
+            self.assertIn("Do manually:", report)
+            self.assertIn("malformed Writer / Title", report)
 
     def test_batch_reports_community_article_as_skipped(self):
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary) / "output"
             community = {"id": "community", "Slug (Print)": "COMMUNITY"}
             with patch("main.OUTPUT_DIR", output), patch("main.get_batch_rows", return_value=([], [community])):
-                self.assertEqual(batch(), 0)
+                self.assertEqual(batch("20260928"), 0)
             report = (output / "review-report.txt").read_text(encoding="mac_roman")
             self.assertIn("Do manually:", report)
             self.assertIn("COMMUNITY: From the Community article (not batched).", report)

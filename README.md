@@ -2,8 +2,8 @@
 
 This tool exports print-ready, XQuark-tagged MacRoman `.txt` files directly
 from the Notion print run sheet and their WordPress posts. It replaces the old
-copy/paste RTF workflow. Complete the [one-time setup](#one-time-setup) before running the weekly print
-workflow.
+copy/paste RTF workflow. Complete the [one-time setup](#one-time-setup) before
+running the weekly print workflow.
 
 ## Weekly print workflow
 
@@ -23,24 +23,28 @@ workflow.
    review report, and `manifest.json`; do not run it until those files are no
    longer needed.
 
-3. Run the batch:
+3. Run the batch with the paper's publication date in `YYYYMMDD` format:
 
    ```bash
-   python3 main.py
+   python3 main.py --publication-date 20260928
    ```
 
 4. Read `output/review-report.txt`. Resolve everything in **Do manually** and
    inspect any formatting/removal warnings. Verify each file’s section header,
    headline/byline, lists, and removed correction or media content.
 
-5. Copy approved `output/<Slug (Print)>.txt` files into the layout folder.
+5. Copy approved files into the layout folder. Files are named
+   `<SECTION><lowercase slug><YYYYMMDD>.txt`, for example
+   `NEWcampusvote20260928.txt`. The supplied date is used for every filename
+   in that batch; it does not come from Notion.
    Keep `manifest.json` while working on this batch and never hand-edit it.
 
-6. To re-export one story during the same batch, use its WordPress admin edit
-   URL (or a permalink containing `?p=ID`):
+6. To re-export one story during the same batch, provide the same
+   `--publication-date` value and its WordPress admin edit URL (or a permalink
+   containing `?p=ID`):
 
    ```bash
-   python3 main.py 'https://stanforddaily.com/wp-admin/post.php?post=123&action=edit'
+   python3 main.py --publication-date 20260928 'https://stanforddaily.com/wp-admin/post.php?post=123&action=edit'
    ```
 
 ## When something goes wrong
@@ -51,6 +55,10 @@ workflow.
 - **Missing author, title, or print slug:** fill in Notion's `Writer / Title`
   and `Slug (Print)` (WordPress authors are used only as a fallback), then
   rerun.
+- **Malformed `Writer / Title`:** use `Name / Role` for one author and
+  separate multiple authors with commas: `Name / Role, Name / Role`. Do not
+  use `Name/Role` or join author pairs with “and”; those stories appear under
+  **Do manually**.
 - **Slug collision / existing output from another story:** give the stories
   distinct print slugs. During an active batch, do not delete or edit individual
   manifest entries to force an overwrite.

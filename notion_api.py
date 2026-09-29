@@ -2,11 +2,25 @@
 
 import os
 import importlib.util
+import re
+from datetime import datetime
 from urllib.parse import parse_qs, urlparse
 
 PRINT_WEEK_FILTER = "✅ This Week"
 PRINT_STATUS_FILTER = "To Print"
 WEB_STATUS_FILTER = "Finaled & published"
+
+PRINT_SECTION_TAGS = {
+    "news": "NEW",
+    "sports": "SPO",
+    "opinions": "OPS",
+    "opinion": "OPS",
+    "arts & life": "A&L",
+    "arts and life": "A&L",
+    "the grind": "GRI",
+    "grind": "GRI",
+    "humor": "HUM",
+}
 
 
 def _load_notion_module():
@@ -94,10 +108,60 @@ def parse_writer_title(value) -> list[tuple[str, str]]:
     return pairs
 
 
+def writer_title_error(value) -> str | None:
+    """Return a reviewable error for ambiguous ``Writer / Title`` text.
+
+    Valid text entries are ``Name / Role`` pairs separated with commas. A bare
+    name is also valid when the article has no bysub. People-type lists are
+    already structured by Notion and need no delimiter validation.
+    """
+    if not value or isinstance(value, list):
+        return None
+    for entry in str(value).split(","):
+        entry = entry.strip()
+        if not entry:
+            return "contains an empty author entry"
+        if "/" in entry and " / " not in entry:
+            return "use spaces around each slash: Name / Role"
+        # This catches e.g. "Writer / Title and Writer / Title" without
+        # rejecting role names such as "Arts and Culture Editor".
+        if re.search(r"\band\s+[^/]+\s/\s", entry, re.I):
+            return "separate multiple Name / Role pairs with commas, not 'and'"
+        if entry.count(" / ") > 1:
+            return "contains more than one Name / Role pair; separate authors with commas"
+        if " / " in entry:
+            name, _, role = entry.partition(" / ")
+            if not name.strip() or not role.strip():
+                return "each Name / Role pair needs both a name and a role"
+    return None
+
+
 def section_from_row(row: dict) -> str:
     return row.get("Section") or row.get("Desk") or ""
 
 
-def filename_stem_from_row(row: dict, fallback: str) -> str:
+def paper_date_digits(value: str) -> str:
+    """Validate a supplied paper date and return its YYYYMMDD representation."""
+    digits = re.sub(r"\D", "", str(value or ""))
+    if len(digits) != 8:
+        raise ValueError("paper date must be YYYYMMDD")
+    try:
+        datetime.strptime(digits, "%Y%m%d")
+    except ValueError as error:
+        raise ValueError("paper date must be a valid YYYYMMDD date") from error
+    return digits
+
+
+def filename_stem_from_row(row: dict, paper_date: str, fallback: str = "") -> str:
+    """Build ``<section tag><lowercase slug><YYYYMMDD>`` for print output."""
+    section = (section_from_row(row) or "").strip().lower()
+    section_tag = PRINT_SECTION_TAGS.get(section)
+    if not section_tag:
+        raise ValueError(f"missing or unsupported print section: {section_from_row(row)!r}")
+
     slug = row.get("Slug (Print)") or fallback
-    return "".join(c for c in str(slug) if c not in r'\/:*?"<>|').strip()
+    slug = "".join(c for c in str(slug) if c not in r'\/:*?"<>|').strip().lower()
+    if not slug:
+        raise ValueError("missing Slug (Print)")
+
+    return f"{section_tag}{slug}{paper_date_digits(paper_date)}"

@@ -15,6 +15,8 @@ UNSUPPORTED_TAGS = {"u", "s", "strike", "table", "thead", "tbody", "tfoot", "tr"
 BLOCK_TAGS = {"p", "div", "section", "article", "header", "footer", "aside", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote"}
 CONTACT_RE = re.compile(r"^contact\s+.+?\s+at\s+[^\s@]+@[^\s@]+\.[^\s.]+\.?$", re.I)
 CONTACT_LIKE_RE = re.compile(r"\bcontact\b|@stanford\.edu\b", re.I)
+WHOLE_ITALIC_RE = re.compile(r"^<@CE(?:It|Boldital)>.*<@\$p>$", re.S)
+OPENING_QUOTES = {'"', '\u201c', '\u2018'}
 
 
 @dataclass
@@ -143,7 +145,72 @@ def _render_list(list_tag: Tag, notes: ConversionNotes) -> list[str]:
     return lines
 
 
-def html_to_xquark(html: str, notes: ConversionNotes | None = None) -> str:
+def _first_visible_character(line: str, start: int = 0) -> int | None:
+    """Find visible text without mistaking an XQuark tag for story text."""
+    index = start
+    while index < len(line):
+        if line[index] == "<":
+            end = line.find(">", index + 1)
+            if end != -1:
+                index = end + 1
+                continue
+        if not line[index].isspace():
+            return index
+        index += 1
+    return None
+
+
+def _apply_dropcap(body: str, dropcap_tag: str) -> str:
+    """Apply the legacy opening dropcap and following ``<*d(0)>`` reset."""
+    paragraphs = body.split("\n\t")
+    target = None
+    for index, paragraph in enumerate(paragraphs):
+        if not paragraph or WHOLE_ITALIC_RE.fullmatch(paragraph):
+            continue
+        # Lists and contact lines are not prose paragraphs and cannot take a
+        # dropcap.
+        if paragraph.startswith("@"):
+            continue
+        target = index
+        break
+    if target is None:
+        return body
+
+    paragraph = paragraphs[target]
+    first = _first_visible_character(paragraph)
+    if first is None:
+        return body
+    width = 1
+    end = first + 1
+    # The legacy tagger widens the box when a quoted sentence opens the story.
+    if paragraph[first] in OPENING_QUOTES:
+        letter = _first_visible_character(paragraph, first + 1)
+        if letter is not None and paragraph[letter].isalpha():
+            width = 2
+            end = letter + 1
+    elif not paragraph[first].isalpha():
+        letter = _first_visible_character(paragraph, first + 1)
+        if letter is None or not paragraph[letter].isalpha():
+            return body
+        first = letter
+        end = letter + 1
+    marker = f"<{dropcap_tag}><*bn(7.2,1,0)*d({width},6)>"
+    paragraphs[target] = paragraph[:first] + marker + paragraph[first:end] + "<@$p>" + paragraph[end:]
+
+    # The original tagger inserts this marker after the first dropcap
+    # paragraph; it restores normal settings for the following prose copy.
+    for index in range(target + 1, len(paragraphs)):
+        if paragraphs[index] and not paragraphs[index].startswith("@"):
+            paragraphs[index] = "<*d(0)> " + paragraphs[index]
+            break
+    return "\n\t".join(paragraphs)
+
+
+def html_to_xquark(
+    html: str,
+    notes: ConversionNotes | None = None,
+    dropcap_tag: str | None = None,
+) -> str:
     """Convert a WordPress HTML fragment to XQuark text.
 
     ``notes`` is optional for backward compatibility; passing it captures
@@ -203,4 +270,5 @@ def html_to_xquark(html: str, notes: ConversionNotes | None = None) -> str:
             if CONTACT_LIKE_RE.search(plain):
                 notes.add_once("contact_warnings", f"unrecognized contact line: {plain[:140]}")
             output.append(line)
-    return "\n\t".join(output).rstrip()
+    body = "\n\t".join(output).rstrip()
+    return _apply_dropcap(body, dropcap_tag) if dropcap_tag else body

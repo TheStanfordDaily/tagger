@@ -135,11 +135,8 @@ def convert(
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python wp_to_xquark.py <wp-admin-edit-url>")
-        sys.exit(1)
     # Keep this legacy command useful, but route all writes through the
     # manifest/report-aware entry point.
-    from main import single
+    from main import cli
 
-    raise SystemExit(single(sys.argv[1]))
+    raise SystemExit(cli(sys.argv[1:]))

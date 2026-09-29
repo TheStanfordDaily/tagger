@@ -7,6 +7,7 @@ Usage:
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import sys
@@ -22,6 +23,7 @@ from notion_api import (
     get_batch_rows,
     parse_writer_title,
     section_from_row,
+    writer_title_error,
 )
 from wp_to_xquark import build_xquark, fetch_post, post_id_from_url
 
@@ -147,7 +149,14 @@ def _resolve_authors(row: dict | None, wp_data: dict) -> list[tuple[str, str]]:
     return [(str(name).strip(), "") for name in creators if str(name).strip()]
 
 
-def _artifact(row: dict | None, wp_url: str) -> tuple[str, str, dict, ConversionNotes]:
+def _artifact(row: dict | None, wp_url: str, paper_date: str) -> tuple[str, str, dict, ConversionNotes]:
+    if row is None:
+        raise ValueError("no Notion row found; cannot determine print filename")
+    stem = filename_stem_from_row(row, paper_date)
+    section = section_from_row(row)
+    writer_error = writer_title_error(row.get("Writer / Title"))
+    if writer_error:
+        raise ValueError(f"malformed Writer / Title: {writer_error}")
     post_id = post_id_from_url(wp_url)
     data = fetch_post(post_id)
     headline = _clean_headline(data.get("title", {}).get("rendered", ""))
@@ -156,24 +165,29 @@ def _artifact(row: dict | None, wp_url: str) -> tuple[str, str, dict, Conversion
     authors = _resolve_authors(row, data)
     if not authors:
         raise ValueError("missing author in both Notion Writer / Title and WordPress")
-    section = section_from_row(row) if row else "news"
     notes = ConversionNotes()
-    body = html_to_xquark(data.get("content", {}).get("rendered", ""), notes)
-    if row is not None and not row.get("Slug (Print)"):
-        raise ValueError("missing Slug (Print)")
-    stem = filename_stem_from_row(row, headline) if row else filename_stem_from_row({}, headline)
-    if not stem:
-        raise ValueError("missing print slug")
-    identity = {"post_id": str(post_id), "wp_url": wp_url, "notion_id": row.get("id") if row else None}
+    dropcap_tags = {
+        "arts & life": "@A&Ldropcap",
+        "arts and life": "@A&Ldropcap",
+        "the grind": "@GRIdropcap",
+        "grind": "@GRIdropcap",
+        "humor": "@HUMdropcap",
+    }
+    body = html_to_xquark(
+        data.get("content", {}).get("rendered", ""),
+        notes,
+        dropcap_tag=dropcap_tags.get((section or "").strip().lower()),
+    )
+    identity = {"post_id": str(post_id), "wp_url": wp_url, "notion_id": row.get("id")}
     return stem, build_xquark(headline, section, authors, body), identity, notes
 
 
-def convert_row(row: dict) -> tuple[str, str]:
+def convert_row(row: dict, paper_date: str) -> tuple[str, str]:
     """Compatibility helper: convert a Notion row without writing output."""
     wp_url = row.get("WP Post")
     if not wp_url:
         raise ValueError(f"Row {row.get('id')} has no WP Post URL")
-    stem, text, _, _ = _artifact(row, wp_url)
+    stem, text, _, _ = _artifact(row, wp_url, paper_date)
     return stem, text
 
 
@@ -185,8 +199,16 @@ def _write_report(report: ReviewReport, output_dir: Path | None = None) -> Path:
     return path
 
 
-def batch() -> int:
+def batch(paper_date: str) -> int:
     report = ReviewReport()
+    try:
+        from notion_api import paper_date_digits
+
+        paper_date = paper_date_digits(paper_date)
+    except ValueError as exc:
+        report.issue("malformed", str(exc), failed=True)
+        _write_report(report)
+        return 1
     try:
         rows, community_rows = get_batch_rows()
     except Exception as exc:
@@ -212,9 +234,13 @@ def batch() -> int:
     # Detect duplicate print slugs before fetching or writing either article.
     claims: dict[str, list[dict]] = {}
     for row in rows:
-        slug = filename_stem_from_row(row, "")
-        if slug:
-            claims.setdefault(slug.casefold(), []).append(row)
+        try:
+            stem = filename_stem_from_row(row, paper_date)
+        except ValueError:
+            # The per-row conversion below records missing section, slug, or
+            # date metadata in Do manually.
+            continue
+        claims.setdefault(stem.casefold(), []).append(row)
     duplicates = {id(row) for same in claims.values() if len(same) > 1 for row in same}
 
     for row in rows:
@@ -230,7 +256,7 @@ def batch() -> int:
             report.issue("malformed", f"{label}: missing WP Post URL", failed=True)
             continue
         try:
-            stem, text, identity, notes = _artifact(row, wp_url)
+            stem, text, identity, notes = _artifact(row, wp_url, paper_date)
             path = writer.write(stem, text, identity)
             report.written.append(path.name)
             report.include_notes(label, notes)
@@ -245,14 +271,17 @@ def batch() -> int:
     return 1 if report.failed else 0
 
 
-def single(wp_url: str) -> int:
+def single(wp_url: str, paper_date: str) -> int:
     report = ReviewReport()
     try:
+        from notion_api import paper_date_digits
+
+        paper_date = paper_date_digits(paper_date)
         # Validate before a Notion lookup so malformed URLs have a useful error.
         post_id_from_url(wp_url)
         row = find_row_for_url(wp_url)
         writer = OutputWriter(OUTPUT_DIR)
-        stem, text, identity, notes = _artifact(row, wp_url)
+        stem, text, identity, notes = _artifact(row, wp_url, paper_date)
         path = writer.write(stem, text, identity)
         report.written.append(path.name)
         report.include_notes(stem, notes)
@@ -272,10 +301,13 @@ def single(wp_url: str) -> int:
     return 0
 
 
+def cli(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Export Notion print stories as XQuark text.")
+    parser.add_argument("--publication-date", required=True, metavar="YYYYMMDD", help="paper publication date for this export")
+    parser.add_argument("wp_url", nargs="?", help="optional WordPress admin URL for a one-story re-export")
+    args = parser.parse_args(argv)
+    return single(args.wp_url, args.publication_date) if args.wp_url else batch(args.publication_date)
+
+
 if __name__ == "__main__":
-    if len(sys.argv) == 1:
-        raise SystemExit(batch())
-    if len(sys.argv) == 2:
-        raise SystemExit(single(sys.argv[1]))
-    print("Usage:\n  python main.py\n  python main.py <wp-admin-edit-url>", file=sys.stderr)
-    raise SystemExit(2)
+    raise SystemExit(cli())
