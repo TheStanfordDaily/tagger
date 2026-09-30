@@ -73,12 +73,12 @@ class MetadataAndOutputTests(unittest.TestCase):
 
     def test_filename_uses_section_lowercase_slug_and_publication_date(self):
         row = {"Section": "Sports", "Slug (Print)": "Home Opener"}
-        self.assertEqual(filename_stem_from_row(row, "20260928"), "SPOhome opener20260928")
+        self.assertEqual(filename_stem_from_row(row, "28"), "SPOhome opener28")
 
     def test_cli_passes_publication_date_to_batch(self):
         with patch("main.batch", return_value=0) as run_batch:
-            self.assertEqual(cli(["--publication-date", "20260928"]), 0)
-        run_batch.assert_called_once_with("20260928")
+            self.assertEqual(cli(["--publication-date", "28"]), 0)
+        run_batch.assert_called_once_with("28")
 
     def test_community_rows_are_not_batched(self):
         ordinary = {"id": "ordinary", "Writer / Title": "A Writer", "Print Week": PRINT_WEEK_FILTER, "Print Status": PRINT_STATUS_FILTER, "Web Status": "Finaled & published"}
@@ -108,7 +108,7 @@ class MetadataAndOutputTests(unittest.TestCase):
             output = Path(temporary) / "output"
             row = {"id": "bad", "WP Post": "https://example.test/?p=1"}
             with patch("main.OUTPUT_DIR", output), patch("main.get_batch_rows", return_value=([row], [])):
-                self.assertEqual(batch("20260928"), 1)
+                self.assertEqual(batch("28"), 1)
             report = (output / "review-report.txt").read_text(encoding="mac_roman")
             self.assertIn("missing Slug (Print)", report)
             self.assertIn("Result: 0 written, 1 failed.", report)
@@ -124,7 +124,7 @@ class MetadataAndOutputTests(unittest.TestCase):
                 "WP Post": "https://example.test/?p=1",
             }
             with patch("main.OUTPUT_DIR", output), patch("main.get_batch_rows", return_value=([row], [])):
-                self.assertEqual(batch("20260928"), 1)
+                self.assertEqual(batch("28"), 1)
             report = (output / "review-report.txt").read_text(encoding="mac_roman")
             self.assertIn("Do manually:", report)
             self.assertIn("malformed Writer / Title", report)
@@ -134,7 +134,7 @@ class MetadataAndOutputTests(unittest.TestCase):
             output = Path(temporary) / "output"
             community = {"id": "community", "Slug (Print)": "COMMUNITY"}
             with patch("main.OUTPUT_DIR", output), patch("main.get_batch_rows", return_value=([], [community])):
-                self.assertEqual(batch("20260928"), 0)
+                self.assertEqual(batch("28"), 0)
             report = (output / "review-report.txt").read_text(encoding="mac_roman")
             self.assertIn("Do manually:", report)
             self.assertIn("COMMUNITY: From the Community article (not batched).", report)

@@ -28,7 +28,7 @@ from notion_api import (
 from wp_to_xquark import build_xquark, fetch_post, post_id_from_url
 
 
-OUTPUT_DIR = Path("output")
+OUTPUT_DIR = Path("OUTPUT")
 MANIFEST_PATH = OUTPUT_DIR / "manifest.json"
 REPORT_PATH = OUTPUT_DIR / "review-report.txt"
 
@@ -222,7 +222,7 @@ def batch(paper_date: str) -> int:
     if not rows:
         report.skipped.append("No non-Community rows matched the configured batch selection.")
         _write_report(report)
-        print("No eligible rows. See output/review-report.txt")
+        print("No eligible rows. See OUTPUT/review-report.txt")
         return 0
     try:
         writer = OutputWriter(OUTPUT_DIR)
@@ -297,13 +297,13 @@ def single(wp_url: str, paper_date: str) -> int:
     if report.failed:
         print(f"Export failed; see {REPORT_PATH}", file=sys.stderr)
         return 1
-    print(f"Written to output/{report.written[0]}; see {REPORT_PATH}")
+    print(f"Written to OUTPUT/{report.written[0]}; see {REPORT_PATH}")
     return 0
 
 
 def cli(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Export Notion print stories as XQuark text.")
-    parser.add_argument("--publication-date", required=True, metavar="YYYYMMDD", help="paper publication date for this export")
+    parser.add_argument("--publication-date", required=True, metavar="D|DD", help="paper publication day for this export")
     parser.add_argument("wp_url", nargs="?", help="optional WordPress admin URL for a one-story re-export")
     args = parser.parse_args(argv)
     return single(args.wp_url, args.publication_date) if args.wp_url else batch(args.publication_date)

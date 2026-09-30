@@ -3,7 +3,6 @@
 import os
 import importlib.util
 import re
-from datetime import datetime
 from urllib.parse import parse_qs, urlparse
 
 PRINT_WEEK_FILTER = "✅ This Week"
@@ -141,19 +140,15 @@ def section_from_row(row: dict) -> str:
 
 
 def paper_date_digits(value: str) -> str:
-    """Validate a supplied paper date and return its YYYYMMDD representation."""
-    digits = re.sub(r"\D", "", str(value or ""))
-    if len(digits) != 8:
-        raise ValueError("paper date must be YYYYMMDD")
-    try:
-        datetime.strptime(digits, "%Y%m%d")
-    except ValueError as error:
-        raise ValueError("paper date must be a valid YYYYMMDD date") from error
-    return digits
+    """Validate a supplied paper day and preserve its D/DD representation."""
+    day = str(value or "").strip()
+    if not re.fullmatch(r"\d{1,2}", day) or not 1 <= int(day) <= 31:
+        raise ValueError("publication date must be a day from 1 to 31 (D or DD)")
+    return day
 
 
 def filename_stem_from_row(row: dict, paper_date: str, fallback: str = "") -> str:
-    """Build ``<section tag><lowercase slug><YYYYMMDD>`` for print output."""
+    """Build ``<section tag><lowercase slug><D-or-DD>`` for print output."""
     section = (section_from_row(row) or "").strip().lower()
     section_tag = PRINT_SECTION_TAGS.get(section)
     if not section_tag:

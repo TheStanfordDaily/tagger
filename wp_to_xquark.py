@@ -125,8 +125,8 @@ def convert(
 
     result = build_xquark(title, section, authors, body)
 
-    os.makedirs("output", exist_ok=True)
-    out_path = os.path.join("output", f"{filename_stem or title}.txt")
+    os.makedirs("OUTPUT", exist_ok=True)
+    out_path = os.path.join("OUTPUT", f"{filename_stem or title}.txt")
     with open(out_path, "w") as f:
         f.write(result)
     print(f"Written to {out_path}")

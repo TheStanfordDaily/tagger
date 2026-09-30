@@ -12,30 +12,23 @@ running the weekly print workflow.
    batch-exported; the report lists them under **Do manually**.
 
 2. Before starting a new batch, move any approved old exports into the layout
-   folder or archive them elsewhere. Then clear the old generated files and
-   their manifest from the project root:
+   folder or archive them elsewhere. Then delete the `OUTPUT` folder in Finder.
+   This permanently removes the prior generated `.txt` files, review report,
+   and `manifest.json`; do not delete it until those files are no longer needed.
+
+3. Run the batch with the paper's publication day in `D` or `DD` format:
 
    ```bash
-   rm -f output/*.txt output/manifest.json
+   python3 main.py --publication-date 29
    ```
 
-   This permanently removes only prior generated `.txt` files, the prior
-   review report, and `manifest.json`; do not run it until those files are no
-   longer needed.
-
-3. Run the batch with the paper's publication date in `YYYYMMDD` format:
-
-   ```bash
-   python3 main.py --publication-date 20260928
-   ```
-
-4. Read `output/review-report.txt`. Resolve everything in **Do manually** and
+4. Read `OUTPUT/review-report.txt`. Resolve everything in **Do manually** and
    inspect any formatting/removal warnings. Verify each file’s section header,
    headline/byline, lists, and removed correction or media content.
 
 5. Copy approved files into the layout folder. Files are named
-   `<SECTION><lowercase slug><YYYYMMDD>.txt`, for example
-   `NEWcampusvote20260928.txt`. The supplied date is used for every filename
+   `<SECTION><lowercase slug><D-or-DD>.txt`, for example
+   `NEWcampusvote29.txt`. The supplied day is used for every filename
    in that batch; it does not come from Notion.
    Keep `manifest.json` while working on this batch and never hand-edit it.
 
@@ -44,7 +37,7 @@ running the weekly print workflow.
    containing `?p=ID`):
 
    ```bash
-   python3 main.py --publication-date 20260928 'https://stanforddaily.com/wp-admin/post.php?post=123&action=edit'
+   python3 main.py --publication-date 29 'https://stanforddaily.com/wp-admin/post.php?post=123&action=edit'
    ```
 
 ## When something goes wrong
