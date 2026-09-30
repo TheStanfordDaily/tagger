@@ -246,7 +246,7 @@ def batch(paper_date: str) -> int:
     duplicates = {id(row) for same in claims.values() if len(same) > 1 for row in same}
 
     for row in rows:
-        label = str(row.get("Slug (Print)") or row.get("id") or "unknown row")
+        label = str(row.get("Slug (Print)") or row.get("Slug (Online)") or "unknown row")
         if id(row) in duplicates:
             report.issue("collisions", f"{label}: duplicate Slug (Print) in this batch", failed=True)
             continue
