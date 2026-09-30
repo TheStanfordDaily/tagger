@@ -195,7 +195,9 @@ def _write_report(report: ReviewReport, output_dir: Path | None = None) -> Path:
     output_dir = output_dir or OUTPUT_DIR
     output_dir.mkdir(parents=True, exist_ok=True)
     path = output_dir / "review-report.txt"
-    path.write_text(_macroman_safe(report.render()), encoding="mac_roman", errors="strict")
+    rendered = report.render()
+    path.write_text(_macroman_safe(rendered), encoding="mac_roman", errors="strict")
+    print(rendered, end="")
     return path
 
 

@@ -2,11 +2,12 @@
 
 import tempfile
 import unittest
+from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
 from html_to_xquark import ConversionNotes, html_to_xquark
-from main import OutputWriter, batch, cli
+from main import OutputWriter, ReviewReport, _write_report, batch, cli
 from notion_api import PRINT_STATUS_FILTER, PRINT_WEEK_FILTER, filename_stem_from_row, get_batch_rows, parse_writer_title, writer_title_error
 from wp_to_xquark import build_xquark, fetch_post
 
@@ -140,8 +141,6 @@ class MetadataAndOutputTests(unittest.TestCase):
             self.assertIn("COMMUNITY: From the Community article (not batched).", report)
 
     def test_report_puts_skips_and_failures_in_do_manually_first(self):
-        from main import ReviewReport
-
         report = ReviewReport(written=["done.txt"], skipped=["community"], malformed=["missing URL"], collisions=["duplicate slug"])
         rendered = report.render()
         self.assertLess(rendered.index("Do manually:"), rendered.index("Written files:"))
@@ -150,12 +149,15 @@ class MetadataAndOutputTests(unittest.TestCase):
         self.assertIn("- duplicate slug", rendered)
 
     def test_clean_report_omits_empty_sections(self):
-        from main import ReviewReport
-
         rendered = ReviewReport(written=["STORY.txt"]).render()
         self.assertIn("Written files:\n- STORY.txt", rendered)
         self.assertNotIn("Do manually:", rendered)
         self.assertNotIn("Unsupported formatting:", rendered)
+
+    def test_report_is_written_and_printed(self):
+        with tempfile.TemporaryDirectory() as temporary, patch("sys.stdout", new_callable=StringIO) as stdout:
+            _write_report(ReviewReport(written=["STORY.txt"]), Path(temporary))
+        self.assertIn("Written files:\n- STORY.txt", stdout.getvalue())
 
     def test_unavailable_wordpress_post_requires_manual_handling(self):
         class Response:

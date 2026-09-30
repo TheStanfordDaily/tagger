@@ -22,7 +22,7 @@ running the weekly print workflow.
    python3 main.py --publication-date 29
    ```
 
-4. Read `OUTPUT/review-report.txt`. Resolve everything in **Do manually** and
+4. Read the output in Terminal or open `OUTPUT/review-report.txt`. Resolve everything in **Do manually** and
    inspect any formatting/removal warnings. Verify each file’s section header,
    headline/byline, lists, and removed correction or media content.
 
