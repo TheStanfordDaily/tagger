@@ -30,7 +30,7 @@ running the weekly print workflow.
 
 4. Read the output in Terminal or open `OUTPUT/review-report.txt`. Resolve everything in **Do manually** and
    inspect any formatting/removal warnings. Verify each file’s section header,
-   headline/byline, lists, and removed correction or media content.
+   byline, lists, and removed correction or media content.
 
 5. Copy approved files into the layout folder. Files are named
    `<SECTION><lowercase slug><D-or-DD>.txt`, for example
@@ -57,7 +57,7 @@ running the weekly print workflow.
 - **Notion, WordPress, or network failure:** check connectivity and rerun. A
   WordPress 401, 403, or 404 means the post is not public yet. Confirm the article
   has been published before re-running the script.
-- **Unsupported formatting or special Opinion layout:** Finish that layout manually.
+- **Unsupported formatting:** Finish that formatting manually.
 
 In every case, correct the source data and rerun the batch or the one-URL
 command. The review report is regenerated on each run.

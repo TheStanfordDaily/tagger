@@ -263,8 +263,6 @@ def batch(paper_date: str) -> int:
             path = writer.write(stem, text, identity)
             report.written.append(path.name)
             report.include_notes(label, notes)
-            if (section_from_row(row) or "").strip().lower().startswith("opinion"):
-                report.unsupported.append(f"{label}: Opinions exported in standard form; review any special Opinion layout.")
         except FileExistsError as exc:
             report.issue("collisions", f"{label}: {exc}", failed=True)
         except Exception as exc:
@@ -290,8 +288,6 @@ def single(wp_url: str, paper_date: str) -> int:
         report.include_notes(stem, notes)
         if not row:
             report.skipped.append("No Notion row matched this URL; used WordPress title/authors and NEWS template.")
-        elif (section_from_row(row) or "").strip().lower().startswith("opinion"):
-            report.unsupported.append(f"{stem}: Opinions exported in standard form; review any special Opinion layout.")
     except FileExistsError as exc:
         report.issue("collisions", str(exc), failed=True)
     except Exception as exc:
