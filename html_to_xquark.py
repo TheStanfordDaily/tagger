@@ -161,8 +161,8 @@ def _first_visible_character(line: str, start: int = 0) -> int | None:
     return None
 
 
-def _apply_dropcap(body: str, dropcap_tag: str) -> str:
-    """Apply the legacy opening dropcap and following ``<*d(0)>`` reset."""
+def _apply_dropcap(body: str, dropcap_tag: str | None = None, *, opinion: bool = False) -> str:
+    """Apply an A&L or Opinion opening dropcap and its ``<*d(0)>`` reset."""
     paragraphs = body.split("\n\t")
     target = None
     for index, paragraph in enumerate(paragraphs):
@@ -205,8 +205,15 @@ def _apply_dropcap(body: str, dropcap_tag: str) -> str:
             return body
         first = letter
         end = letter + 1
-    marker = f"<{dropcap_tag}><*bn(7.2,1,0)*d({width},6)>"
-    paragraphs[target] = paragraph[:first] + marker + paragraph[first:end] + "<@$p>" + paragraph[end:]
+    if opinion:
+        marker = f"<*d({width},3)><z9>"
+        closing = "<z$>"
+    else:
+        if not dropcap_tag:
+            return body
+        marker = f"<{dropcap_tag}><*bn(7.2,1,0)*d({width},6)>"
+        closing = "<@$p>"
+    paragraphs[target] = paragraph[:first] + marker + paragraph[first:end] + closing + paragraph[end:]
 
     # The original tagger inserts this marker after the first dropcap
     # paragraph; it restores normal settings for the following prose copy.
@@ -217,13 +224,18 @@ def _apply_dropcap(body: str, dropcap_tag: str) -> str:
     rendered = "\n\t".join(paragraphs)
     # If an italic note precedes the story, the separator normally contributes
     # a tab before the dropcap tag. The dropcap tag must begin its own line.
-    return rendered.replace(f"\n\t<{dropcap_tag}>", f"\n<{dropcap_tag}>", 1)
+    if opinion:
+        return rendered.replace(f"\n\t<*d({width},3)><z9>", f"\n<*d({width},3)><z9>", 1)
+    if dropcap_tag:
+        return rendered.replace(f"\n\t<{dropcap_tag}>", f"\n<{dropcap_tag}>", 1)
+    return rendered
 
 
 def html_to_xquark(
     html: str,
     notes: ConversionNotes | None = None,
     dropcap_tag: str | None = None,
+    opinion_dropcap: bool = False,
 ) -> str:
     """Convert a WordPress HTML fragment to XQuark text.
 
@@ -292,4 +304,4 @@ def html_to_xquark(
     # A tab marks each prose paragraph in the print template. Prefix the first
     # item as well: joining with ``\n\t`` alone only tabbed later paragraphs.
     body = ("\t" + "\n\t".join(output)).rstrip() if output else ""
-    return _apply_dropcap(body, dropcap_tag) if dropcap_tag else body
+    return _apply_dropcap(body, dropcap_tag, opinion=opinion_dropcap) if dropcap_tag or opinion_dropcap else body

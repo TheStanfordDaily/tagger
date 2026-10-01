@@ -51,6 +51,18 @@ class HtmlConversionTests(unittest.TestCase):
         self.assertNotIn("@A&Lbysub:\n", text)
         self.assertNotIn("@headline:", text)
 
+    def test_normalcopy_follows_leading_italic_note(self):
+        text = build_xquark(
+            "A title",
+            "Arts & Life",
+            [("One", "Editor")],
+            "<@CEIt>\t Editor’s Note: context.<@$p>\n<@A&Ldropcap>Story copy.",
+        )
+        self.assertIn(
+            "<@CEIt>\t Editor’s Note: context.<@$p>\n@normalcopy:<@A&Ldropcap>Story copy.",
+            text,
+        )
+
     def test_dropcap_skips_opening_italic_note(self):
         output = html_to_xquark(
             "<p><em>Editor’s Note: context.</em></p><p>“This is the story.</p><p>Second paragraph.</p>",
@@ -68,6 +80,14 @@ class HtmlConversionTests(unittest.TestCase):
         output = html_to_xquark("<p>Grind copy.</p><p>Next paragraph.</p>", dropcap_tag="@GRIdropcap")
         self.assertIn("<@GRIdropcap><*bn(7.2,1,0)*d(1,6)>G<@$p>rind", output)
         self.assertIn("<*d(0)> Next paragraph.", output)
+
+    def test_opinion_dropcap_uses_opinion_style(self):
+        output = html_to_xquark(
+            "<p>“This is an opinion.</p><p>Second paragraph.</p>",
+            opinion_dropcap=True,
+        )
+        self.assertTrue(output.startswith("<*d(2,3)><z9>“T<z$>his is an opinion."))
+        self.assertIn("\n\t<*d(0)> Second paragraph.", output)
 
 
 class MetadataAndOutputTests(unittest.TestCase):

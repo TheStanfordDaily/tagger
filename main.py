@@ -177,6 +177,7 @@ def _artifact(row: dict | None, wp_url: str, paper_date: str) -> tuple[str, str,
         data.get("content", {}).get("rendered", ""),
         notes,
         dropcap_tag=dropcap_tags.get((section or "").strip().lower()),
+        opinion_dropcap=(section or "").strip().lower() in {"opinion", "opinions", "op-ed", "op-eds"},
     )
     identity = {"post_id": str(post_id), "wp_url": wp_url, "notion_id": row.get("id")}
     return stem, build_xquark(headline, section, authors, body), identity, notes
