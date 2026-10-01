@@ -66,7 +66,7 @@ def build_xquark(headline: str, section: str, authors: list[tuple[str, str]], bo
             continue
         bylines.append(f"{byline_tag}:By {name.upper()}")
         if position and str(position).strip():
-            bylines.append(f"{bysub_tag}:{str(position).strip().lower()}")
+            bylines.append(f"{bysub_tag}:{str(position).strip().title()}")
     if not bylines:
         bylines.append(f"{byline_tag}:By AUTHOR")
     return "\n".join(

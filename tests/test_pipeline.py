@@ -47,7 +47,7 @@ class HtmlConversionTests(unittest.TestCase):
     def test_no_empty_bysub_and_complete_section_headers(self):
         text = build_xquark("A title", "The Grind", [("One", "Editor"), ("Two", "")], "Copy")
         self.assertTrue(text.startswith("<v9.30><e0>\n@NewsHeader:ARTS & LIFE"))
-        self.assertIn("@A&Lbyline:By ONE\n@A&Lbysub:editor\n@A&Lbyline:By TWO", text)
+        self.assertIn("@A&Lbyline:By ONE\n@A&Lbysub:Editor\n@A&Lbyline:By TWO", text)
         self.assertNotIn("@A&Lbysub:\n", text)
         self.assertNotIn("@headline:", text)
 
