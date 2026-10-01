@@ -7,19 +7,18 @@ running the weekly print workflow.
 
 ## Weekly print workflow
 
-1. In Notion, set every story for this print batch to **This Week**, **To
-   Print**, and **Finaled & published**. “From the Community” stories are not
-   batch-exported; the report lists them under **Do manually**.
+1. In Notion, the batching script will execute on every story set to **This Week**, **To
+   Print**, and **Finaled & published**.
 
 2. Before starting a new batch, move any approved old exports into the layout
    folder or archive them elsewhere. Then delete the `OUTPUT` folder in Finder.
-   This permanently removes the prior generated `.txt` files, review report,
+   This permanently removes the priorly generated `.txt` files, review report,
    and `manifest.json`; do not delete it until those files are no longer needed.
 
-3. Open Terminal and run:
+3. Open a new Terminal and run:
 
    ```bash
-   cd Downloads/new-tagger
+   cd /Downloads/new-tagger
    ```
    
    Then run the batch with the paper's publication day in `D` or `DD` format:
