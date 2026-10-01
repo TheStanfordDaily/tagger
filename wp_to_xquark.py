@@ -49,11 +49,11 @@ def build_xquark(headline: str, section: str, authors: list[tuple[str, str]], bo
             continue
         bylines.append(f"{byline_tag}:By {name.upper()}")
         if position and str(position).strip():
-            bylines.append(f"{bysub_tag}:{str(position).strip().upper()}")
+            bylines.append(f"{bysub_tag}:{str(position).strip().lower()}")
     if not bylines:
         bylines.append(f"{byline_tag}:By AUTHOR")
     return "\n".join(
-        [f"<v{version}><e0>", f"@NewsHeader:{header}", f"@headline:{headline}", *bylines, "@normalcopy:", body]
+        [f"<v{version}><e0>", f"@NewsHeader:{header}", *bylines, "@normalcopy:", body]
     ).rstrip() + "\n"
 
 def get_sample_json():

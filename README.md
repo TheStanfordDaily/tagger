@@ -16,7 +16,13 @@ running the weekly print workflow.
    This permanently removes the prior generated `.txt` files, review report,
    and `manifest.json`; do not delete it until those files are no longer needed.
 
-3. Run the batch with the paper's publication day in `D` or `DD` format:
+3. Open Terminal and run:
+
+   ```bash
+   cd Downloads/new-tagger
+   ```
+   
+   Then run the batch with the paper's publication day in `D` or `DD` format:
 
    ```bash
    python3 main.py --publication-date 29
@@ -31,14 +37,7 @@ running the weekly print workflow.
    `NEWcampusvote29.txt`. The supplied day is used for every filename
    in that batch; it does not come from Notion.
    Keep `manifest.json` while working on this batch and never hand-edit it.
-
-6. To re-export one story during the same batch, provide the same
-   `--publication-date` value and its WordPress admin edit URL (or a permalink
-   containing `?p=ID`):
-
-   ```bash
-   python3 main.py --publication-date 29 'https://stanforddaily.com/wp-admin/post.php?post=123&action=edit'
-   ```
+   
 
 ## When something goes wrong
 

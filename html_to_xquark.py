@@ -16,6 +16,7 @@ BLOCK_TAGS = {"p", "div", "section", "article", "header", "footer", "aside", "h1
 CONTACT_RE = re.compile(r"^contact\s+.+?\s+at\s+[^\s@]+@[^\s@]+\.[^\s.]+\.?$", re.I)
 CONTACT_LIKE_RE = re.compile(r"\bcontact\b|@stanford\.edu\b", re.I)
 WHOLE_ITALIC_RE = re.compile(r"^<@CE(?:It|Boldital)>.*<@\$p>$", re.S)
+ITALIC_OPEN_RE = re.compile(r"^(<@CE(?:It|Boldital)>)(.*)$", re.S)
 OPENING_QUOTES = {'"', '\u201c', '\u2018'}
 
 
@@ -165,18 +166,28 @@ def _apply_dropcap(body: str, dropcap_tag: str) -> str:
     paragraphs = body.split("\n\t")
     target = None
     for index, paragraph in enumerate(paragraphs):
-        if not paragraph or WHOLE_ITALIC_RE.fullmatch(paragraph):
+        stripped = paragraph.strip()
+        if not stripped:
+            continue
+        if WHOLE_ITALIC_RE.fullmatch(stripped):
+            # An A&L editor's note leads with its italic tag, followed by the
+            # tab/space indent expected by the print template.
+            match = ITALIC_OPEN_RE.fullmatch(stripped)
+            if match:
+                paragraphs[index] = f"{match.group(1)}\t {match.group(2)}"
             continue
         # Lists and contact lines are not prose paragraphs and cannot take a
         # dropcap.
-        if paragraph.startswith("@"):
+        if stripped.startswith("@"):
             continue
         target = index
         break
     if target is None:
         return body
 
-    paragraph = paragraphs[target]
+    # Dropcap paragraphs are the exception to the regular initial-tab rule:
+    # the dropcap tag itself begins the line.
+    paragraph = paragraphs[target].lstrip()
     first = _first_visible_character(paragraph)
     if first is None:
         return body
@@ -200,10 +211,13 @@ def _apply_dropcap(body: str, dropcap_tag: str) -> str:
     # The original tagger inserts this marker after the first dropcap
     # paragraph; it restores normal settings for the following prose copy.
     for index in range(target + 1, len(paragraphs)):
-        if paragraphs[index] and not paragraphs[index].startswith("@"):
+        if paragraphs[index].strip() and not paragraphs[index].lstrip().startswith("@"):
             paragraphs[index] = "<*d(0)> " + paragraphs[index]
             break
-    return "\n\t".join(paragraphs)
+    rendered = "\n\t".join(paragraphs)
+    # If an italic note precedes the story, the separator normally contributes
+    # a tab before the dropcap tag. The dropcap tag must begin its own line.
+    return rendered.replace(f"\n\t<{dropcap_tag}>", f"\n<{dropcap_tag}>", 1)
 
 
 def html_to_xquark(
@@ -246,13 +260,18 @@ def html_to_xquark(
                 for child in node.children:
                     visit(child)
                 return
+            if name in {"h1", "h2", "h3", "h4", "h5", "h6"}:
+                # Print templates treat web headings as standalone bold
+                # paragraphs; discard any nested web styling for consistency.
+                text = _normalise_text(_plain(node)).strip()
+                if text:
+                    lines.append(f"<@CEBold>{text}<@$p>")
+                return
             if _is_correction(node):
                 notes.add_once("removed", f"removed correction/update: {_plain(node)[:120]}")
                 return
             text = _render_inline(node)
             if text:
-                if name.startswith("h"):
-                    notes.add_once("unsupported", f"{name} exported as a normal paragraph")
                 lines.extend(part.strip() for part in text.split("\n") if part.strip())
             return
         for child in node.children:
@@ -270,5 +289,7 @@ def html_to_xquark(
             if CONTACT_LIKE_RE.search(plain):
                 notes.add_once("contact_warnings", f"unrecognized contact line: {plain[:140]}")
             output.append(line)
-    body = "\n\t".join(output).rstrip()
+    # A tab marks each prose paragraph in the print template. Prefix the first
+    # item as well: joining with ``\n\t`` alone only tabbed later paragraphs.
+    body = ("\t" + "\n\t".join(output)).rstrip() if output else ""
     return _apply_dropcap(body, dropcap_tag) if dropcap_tag else body

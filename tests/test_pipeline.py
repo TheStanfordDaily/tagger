@@ -33,19 +33,31 @@ class HtmlConversionTests(unittest.TestCase):
         self.assertNotIn("Correction: old copy", output)
         self.assertTrue(any("figure" in item for item in notes.removed))
 
+    def test_first_paragraph_is_tabbed(self):
+        output = html_to_xquark("<p>First paragraph.</p><p>Second paragraph.</p>")
+        self.assertEqual(output, "\tFirst paragraph.\n\tSecond paragraph.")
+
+    def test_headings_are_standalone_bold_paragraphs(self):
+        output = html_to_xquark("<p>Before.</p><h2><em>A heading</em></h2><h4>Another heading</h4><p>After.</p>")
+        self.assertEqual(
+            output,
+            "\tBefore.\n\t<@CEBold>A heading<@$p>\n\t<@CEBold>Another heading<@$p>\n\tAfter.",
+        )
+
     def test_no_empty_bysub_and_complete_section_headers(self):
         text = build_xquark("A title", "The Grind", [("One", "Editor"), ("Two", "")], "Copy")
         self.assertTrue(text.startswith("<v9.30><e0>\n@NewsHeader:ARTS & LIFE"))
-        self.assertIn("@A&Lbyline:By ONE\n@A&Lbysub:EDITOR\n@A&Lbyline:By TWO", text)
+        self.assertIn("@A&Lbyline:By ONE\n@A&Lbysub:editor\n@A&Lbyline:By TWO", text)
         self.assertNotIn("@A&Lbysub:\n", text)
+        self.assertNotIn("@headline:", text)
 
     def test_dropcap_skips_opening_italic_note(self):
         output = html_to_xquark(
             "<p><em>Editor’s Note: context.</em></p><p>“This is the story.</p><p>Second paragraph.</p>",
             dropcap_tag="@A&Ldropcap",
         )
-        self.assertTrue(output.startswith("<@CEIt>Editor’s Note: context.<@$p>"))
-        self.assertIn("<@A&Ldropcap><*bn(7.2,1,0)*d(2,6)>“T<@$p>his", output)
+        self.assertTrue(output.startswith("<@CEIt>\t Editor’s Note: context.<@$p>"))
+        self.assertIn("\n<@A&Ldropcap><*bn(7.2,1,0)*d(2,6)>“T<@$p>his", output)
         self.assertIn("<*d(0)> Second paragraph.", output)
 
     def test_non_al_body_does_not_receive_dropcap(self):
