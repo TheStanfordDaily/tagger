@@ -229,7 +229,7 @@ def batch(paper_date: str) -> int:
             "@OPStitle:Role/Title"
         )
     if not rows:
-        report.skipped.append("No non-Community rows matched the configured batch selection.")
+        report.skipped.append("No eligible rows found in Notion.")
         _write_report(report)
         print("No eligible rows. See OUTPUT/review-report.txt")
         return 0
