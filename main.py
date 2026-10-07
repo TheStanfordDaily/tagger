@@ -171,7 +171,7 @@ def _artifact(row: dict | None, wp_url: str, paper_date: str) -> tuple[str, str,
         "arts and life": "@A&Ldropcap",
         "the grind": "@GRIdropcap",
         "grind": "@GRIdropcap",
-        "humor": "@HUMdropcap",
+        "humor": "@A&Ldropcap",
     }
     body = html_to_xquark(
         data.get("content", {}).get("rendered", ""),
@@ -221,7 +221,13 @@ def batch(paper_date: str) -> int:
         return 1
     for row in community_rows:
         label = str(row.get("Slug (Print)") or row.get("id") or "unknown row")
-        report.skipped.append(f"{label}: From the Community article (not batched).")
+        report.skipped.append(
+            f"{label}: From the Community article (not batched). "
+            "Manually add the following at the bottom of the article, "
+            "replacing the placeholders with the author's name and role/title:\n"
+            "@OPScred:Firstname Lastname\n"
+            "@OPStitle:Role/Title"
+        )
     if not rows:
         report.skipped.append("No non-Community rows matched the configured batch selection.")
         _write_report(report)

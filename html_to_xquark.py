@@ -304,4 +304,8 @@ def html_to_xquark(
     # A tab marks each prose paragraph in the print template. Prefix the first
     # item as well: joining with ``\n\t`` alone only tabbed later paragraphs.
     body = ("\t" + "\n\t".join(output)).rstrip() if output else ""
-    return _apply_dropcap(body, dropcap_tag, opinion=opinion_dropcap) if dropcap_tag or opinion_dropcap else body
+    if dropcap_tag or opinion_dropcap:
+        body = _apply_dropcap(body, dropcap_tag, opinion=opinion_dropcap)
+    # Paragraph-style tags must begin at the left edge, including list and
+    # contact tags. Do this after dropcaps, which use the tabbed boundaries.
+    return re.sub(r"^[ \t]+(?=@)", "", body, flags=re.M)

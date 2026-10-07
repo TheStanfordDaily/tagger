@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from html_to_xquark import ConversionNotes, html_to_xquark
-from main import OutputWriter, ReviewReport, _write_report, batch, cli
+from main import OutputWriter, ReviewReport, _write_report, batch, cli, convert_row
 from notion_api import PRINT_STATUS_FILTER, PRINT_WEEK_FILTER, filename_stem_from_row, get_batch_rows, parse_writer_title, writer_title_error
 from wp_to_xquark import build_xquark, fetch_post
 
@@ -36,6 +36,25 @@ class HtmlConversionTests(unittest.TestCase):
     def test_first_paragraph_is_tabbed(self):
         output = html_to_xquark("<p>First paragraph.</p><p>Second paragraph.</p>")
         self.assertEqual(output, "\tFirst paragraph.\n\tSecond paragraph.")
+
+    def test_paragraph_tags_are_flush_left_with_and_without_dropcaps(self):
+        html = (
+            "<ul><li>First bullet</li></ul><p>Story copy.</p>"
+            "<ol><li>Numbered item</li></ol><p>Next paragraph.</p>"
+            "<p>@OPScred:Jane Doe</p>"
+            "<p>Contact Jane Doe at jane@stanford.edu.</p>"
+        )
+        for dropcap in (None, "@A&Ldropcap"):
+            with self.subTest(dropcap=dropcap):
+                output = html_to_xquark(html, dropcap_tag=dropcap)
+                tagged_lines = [line for line in output.splitlines() if line.lstrip().startswith("@")]
+                self.assertEqual(len(tagged_lines), 4)
+                self.assertTrue(all(line.startswith("@") for line in tagged_lines))
+                if dropcap:
+                    self.assertIn("\n<@A&Ldropcap>", output)
+                    self.assertIn("\n\t<*d(0)> Next paragraph.", output)
+                else:
+                    self.assertIn("\n\tNext paragraph.", output)
 
     def test_headings_are_standalone_bold_paragraphs(self):
         output = html_to_xquark("<p>Before.</p><h2><em>A heading</em></h2><h4>Another heading</h4><p>After.</p>")
@@ -91,6 +110,18 @@ class HtmlConversionTests(unittest.TestCase):
 
 
 class MetadataAndOutputTests(unittest.TestCase):
+    def test_humor_uses_arts_and_life_dropcap(self):
+        row = {
+            "Section": "Humor", "Slug (Print)": "Funny",
+            "Writer / Title": "Jane Doe / Writer", "WP Post": "https://example.test/?p=1",
+        }
+        post = {"title": {"rendered": "Funny"}, "content": {"rendered": "<p>Funny story.</p>"}}
+        with patch("main.fetch_post", return_value=post):
+            stem, text = convert_row(row, "28")
+        self.assertEqual(stem, "HUMfunny28")
+        self.assertIn("<@A&Ldropcap>", text)
+        self.assertNotIn("HUMdropcap", text)
+
     def test_author_variants(self):
         self.assertEqual(parse_writer_title("A / Editor, B / Writer"), [("A", "Editor"), ("B", "Writer")])
         self.assertEqual(parse_writer_title(["A", "B"]), [("A", ""), ("B", "")])
@@ -171,6 +202,8 @@ class MetadataAndOutputTests(unittest.TestCase):
             report = (output / "review-report.txt").read_text(encoding="mac_roman")
             self.assertIn("Do manually:", report)
             self.assertIn("COMMUNITY: From the Community article (not batched).", report)
+            self.assertIn("Manually add the following at the bottom of the article", report)
+            self.assertIn("\n@OPScred:Firstname Lastname\n@OPStitle:Role/Title\n", report)
 
     def test_report_puts_skips_and_failures_in_do_manually_first(self):
         report = ReviewReport(written=["done.txt"], skipped=["community"], malformed=["missing URL"], collisions=["duplicate slug"])
@@ -185,6 +218,7 @@ class MetadataAndOutputTests(unittest.TestCase):
         self.assertIn("Written files:\n- STORY.txt", rendered)
         self.assertNotIn("Do manually:", rendered)
         self.assertNotIn("Unsupported formatting:", rendered)
+        self.assertNotIn("@OPScred:", rendered)
 
     def test_report_is_written_and_printed(self):
         with tempfile.TemporaryDirectory() as temporary, patch("sys.stdout", new_callable=StringIO) as stdout:
