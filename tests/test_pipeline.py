@@ -69,6 +69,7 @@ class HtmlConversionTests(unittest.TestCase):
         self.assertIn("@A&Lbyline:By ONE\n@A&Lbysub:Editor\n@A&Lbyline:By TWO", text)
         self.assertNotIn("@A&Lbysub:\n", text)
         self.assertNotIn("@headline:", text)
+        self.assertIn("@A&Lbyline:By TWO\n\n@normalcopy:Copy", text)
 
     def test_normalcopy_follows_leading_italic_note(self):
         text = build_xquark(
@@ -78,7 +79,7 @@ class HtmlConversionTests(unittest.TestCase):
             "<@CEIt>\t Editor’s Note: context.<@$p>\n<@A&Ldropcap>Story copy.",
         )
         self.assertIn(
-            "<@CEIt>\t Editor’s Note: context.<@$p>\n@normalcopy:<@A&Ldropcap>Story copy.",
+            "@A&Lbysub:Editor\n\n<@CEIt>\t Editor’s Note: context.<@$p>\n\n@normalcopy:<@A&Ldropcap>Story copy.",
             text,
         )
 

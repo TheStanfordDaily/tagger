@@ -21,7 +21,7 @@ DEFAULT_SECTION = SECTION_TAG_MAP["news"]
 
 
 def _normalcopy_before_first_non_italic_paragraph(body: str) -> str:
-    """Place ``@normalcopy:`` after any leading italic editor's note."""
+    """Place ``@normalcopy:`` a blank line after any leading italic note."""
     lines = body.splitlines()
     for index, line in enumerate(lines):
         paragraph = line.strip()
@@ -31,10 +31,12 @@ def _normalcopy_before_first_non_italic_paragraph(body: str) -> str:
         )
         if not is_italic:
             lines[index] = f"@normalcopy:{line}"
+            if index:
+                lines.insert(index, "")
             return "\n".join(lines)
     # Preserve a valid normal-copy tag even if the source contained only an
     # italic note (or no body) and therefore has no prose paragraph to mark.
-    return f"{body}\n@normalcopy:".lstrip("\n")
+    return f"{body}\n\n@normalcopy:".lstrip("\n")
 
 
 def _section_template(section: str) -> tuple[str, str, str, str]:
@@ -70,7 +72,7 @@ def build_xquark(headline: str, section: str, authors: list[tuple[str, str]], bo
     if not bylines:
         bylines.append(f"{byline_tag}:By AUTHOR")
     return "\n".join(
-        [f"<v{version}><e0>", f"@NewsHeader:{header}", *bylines, _normalcopy_before_first_non_italic_paragraph(body)]
+        [f"<v{version}><e0>", f"@NewsHeader:{header}", *bylines, "", _normalcopy_before_first_non_italic_paragraph(body)]
     ).rstrip() + "\n"
 
 def get_sample_json():
