@@ -18,6 +18,7 @@ CONTACT_LIKE_RE = re.compile(r"\bcontact\b|@stanford\.edu\b", re.I)
 WHOLE_ITALIC_RE = re.compile(r"^<@CE(?:It|Boldital)>.*<@\$p>$", re.S)
 ITALIC_OPEN_RE = re.compile(r"^(<@CE(?:It|Boldital)>)(.*)$", re.S)
 OPENING_QUOTES = {'"', '\u201c', '\u2018'}
+EDITOR_NOTE_RE = re.compile(r"^\[?\s*editor(?:['’]s|s['’])\s+note\s*:", re.I)
 
 
 @dataclass
@@ -170,7 +171,7 @@ def _apply_dropcap(body: str, dropcap_tag: str | None = None, *, opinion: bool =
         if not stripped:
             continue
         if WHOLE_ITALIC_RE.fullmatch(stripped):
-            # An A&L editor's note leads with its italic tag, followed by the
+            # A leading italic paragraph keeps its italic tag, followed by the
             # tab/space indent expected by the print template.
             match = ITALIC_OPEN_RE.fullmatch(stripped)
             if match:
@@ -295,7 +296,10 @@ def html_to_xquark(
     output: list[str] = []
     for line in lines:
         plain = re.sub(r"<[^>]+>", "", line).strip()
-        if CONTACT_RE.match(plain):
+        if EDITOR_NOTE_RE.match(plain):
+            text = plain.removeprefix("[").removesuffix("]").strip()
+            output.append(f"@E-Note:\t [{text}]")
+        elif CONTACT_RE.match(plain):
             output.append(f"@@line:{line}")
         else:
             if CONTACT_LIKE_RE.search(plain):
@@ -306,6 +310,8 @@ def html_to_xquark(
     body = ("\t" + "\n\t".join(output)).rstrip() if output else ""
     if dropcap_tag or opinion_dropcap:
         body = _apply_dropcap(body, dropcap_tag, opinion=opinion_dropcap)
+    # Restore the prose style after a note, including notes inside the story.
+    body = re.sub(r"(^[ \t]*@E-Note:[^\n]*\n)([ \t]*)(?!@)(?=\S)", r"\1@normalcopy:\2", body, flags=re.M)
     # Paragraph-style tags must begin at the left edge, including list and
     # contact tags. Do this after dropcaps, which use the tabbed boundaries.
     return re.sub(r"^[ \t]+(?=@)", "", body, flags=re.M)

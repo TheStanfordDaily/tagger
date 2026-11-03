@@ -13,6 +13,18 @@ from wp_to_xquark import build_xquark, fetch_post
 
 
 class HtmlConversionTests(unittest.TestCase):
+    def test_editor_notes_use_paragraph_style_and_restore_body_style(self):
+        for label in ("Editor's Note", "Editor’s Note", "Editors’ Note"):
+            for markup in ("{text}", "<strong>{text}</strong>", "<em>{text}</em>"):
+                for bracketed in (False, True):
+                    text = f"{label}: Context."
+                    source = f"[{text}]" if bracketed else text
+                    with self.subTest(label=label, markup=markup, bracketed=bracketed):
+                        output = html_to_xquark(
+                            "<p>Before.</p><p>" + markup.format(text=source) + "</p><p>After.</p>"
+                        )
+                        self.assertEqual(output, f"\tBefore.\n@E-Note:\t [{text}]\n@normalcopy:\tAfter.")
+
     def test_inline_lists_contact_and_removed_content(self):
         notes = ConversionNotes()
         output = html_to_xquark(
@@ -71,15 +83,15 @@ class HtmlConversionTests(unittest.TestCase):
         self.assertNotIn("@headline:", text)
         self.assertIn("@A&Lbyline:By TWO\n\n@normalcopy:Copy", text)
 
-    def test_normalcopy_follows_leading_italic_note(self):
+    def test_normalcopy_follows_leading_editor_note(self):
         text = build_xquark(
             "A title",
             "Arts & Life",
             [("One", "Editor")],
-            "<@CEIt>\t Editor’s Note: context.<@$p>\n<@A&Ldropcap>Story copy.",
+            "@E-Note:\t [Editor’s Note: context.]\n<@A&Ldropcap>Story copy.",
         )
         self.assertIn(
-            "@A&Lbysub:Editor\n\n<@CEIt>\t Editor’s Note: context.<@$p>\n\n@normalcopy:<@A&Ldropcap>Story copy.",
+            "@A&Lbysub:Editor\n\n@E-Note:\t [Editor’s Note: context.]\n\n@normalcopy:<@A&Ldropcap>Story copy.",
             text,
         )
 
@@ -88,8 +100,8 @@ class HtmlConversionTests(unittest.TestCase):
             "<p><em>Editor’s Note: context.</em></p><p>“This is the story.</p><p>Second paragraph.</p>",
             dropcap_tag="@A&Ldropcap",
         )
-        self.assertTrue(output.startswith("<@CEIt>\t Editor’s Note: context.<@$p>"))
-        self.assertIn("\n<@A&Ldropcap><*bn(7.2,1,0)*d(2,6)>“T<@$p>his", output)
+        self.assertTrue(output.startswith("@E-Note:\t [Editor’s Note: context.]"))
+        self.assertIn("\n@normalcopy:<@A&Ldropcap><*bn(7.2,1,0)*d(2,6)>“T<@$p>his", output)
         self.assertIn("<*d(0)> Second paragraph.", output)
 
     def test_non_al_body_does_not_receive_dropcap(self):
@@ -111,6 +123,21 @@ class HtmlConversionTests(unittest.TestCase):
 
 
 class MetadataAndOutputTests(unittest.TestCase):
+    def test_editor_notes_across_all_sections(self):
+        for section in ("News", "Sports", "Opinions", "Arts & Life", "The Grind", "Humor"):
+            with self.subTest(section=section):
+                row = {
+                    "Section": section, "Slug (Print)": "Story",
+                    "Writer / Title": "Jane Doe / Writer", "WP Post": "https://example.test/?p=1",
+                }
+                post = {"title": {"rendered": "Story"}, "content": {"rendered":
+                    "<p><strong>[Editor's Note: Context.]</strong></p><p>Story copy.</p>"}}
+                with patch("main.fetch_post", return_value=post):
+                    _, text = convert_row(row, "28")
+                self.assertIn("\n@E-Note:\t [Editor's Note: Context.]\n\n@normalcopy:", text)
+                self.assertNotIn("<@CEBold>", text)
+                self.assertNotIn("@normalcopy:@normalcopy:", text)
+
     def test_humor_uses_arts_and_life_dropcap(self):
         row = {
             "Section": "Humor", "Slug (Print)": "Funny",

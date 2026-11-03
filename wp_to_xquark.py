@@ -21,7 +21,7 @@ DEFAULT_SECTION = SECTION_TAG_MAP["news"]
 
 
 def _normalcopy_before_first_non_italic_paragraph(body: str) -> str:
-    """Place ``@normalcopy:`` a blank line after any leading italic note."""
+    """Place ``@normalcopy:`` after leading editor's notes or italic copy."""
     lines = body.splitlines()
     for index, line in enumerate(lines):
         paragraph = line.strip()
@@ -29,8 +29,8 @@ def _normalcopy_before_first_non_italic_paragraph(body: str) -> str:
             paragraph.startswith(("<@CEIt>", "<@CEBoldital>"))
             and paragraph.endswith("<@$p>")
         )
-        if not is_italic:
-            lines[index] = f"@normalcopy:{line}"
+        if not is_italic and not paragraph.startswith("@E-Note:"):
+            lines[index] = line if paragraph.startswith("@normalcopy:") else f"@normalcopy:{line}"
             if index:
                 lines.insert(index, "")
             return "\n".join(lines)
